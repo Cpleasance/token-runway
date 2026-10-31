@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "token-runway"
+version = "0.1.0"
+description = "Model Context Protocol (MCP) server providing real-time token runway, quota, and rate-limit awareness for AI agents."
+readme = "README.md"
+authors = [{ name = "Cory Pleasance" }]
+license = { text = "MIT" }
+requires-python = ">=3.8"
+dependencies = []
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "ai-agents",
+    "rate-limits",
+    "token-budget",
+    "claude",
+    "gemini",
+    "copilot",
+    "antigravity",
+    "llm-monitoring",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Environment :: Console",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "ruff>=0.5"]
+
+[project.scripts]
+token-runway = "token_runway.cli:main"
+tokenrunway = "token_runway.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Cpleasance/token-runway"
+Documentation = "https://github.com/Cpleasance/token-runway#readme"
+Repository = "https://github.com/Cpleasance/token-runway.git"
+"Bug Tracker" = "https://github.com/Cpleasance/token-runway/issues"
+Changelog = "https://github.com/Cpleasance/token-runway/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+include = ["token_runway*"]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+addopts = "-ra -q"
+filterwarnings = ["error"]
+
+[tool.ruff]
+target-version = "py38"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
