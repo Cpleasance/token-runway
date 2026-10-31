@@ -67,3 +67,5 @@ jobs:
       - name: Remove non-distributable files
         run: rm -f dist/SHA256SUMS.txt
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true

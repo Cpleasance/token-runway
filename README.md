@@ -1,6 +1,6 @@
 # Token Runway 🛫
 
-[![PyPI version](https://img.shields.io/pypi/v/token-runway.svg)](https://pypi.org/project/token-runway/)
+[![PyPI version](https://badge.fury.io/py/token-runway.svg)](https://pypi.org/project/token-runway/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP](https://img.shields.io/badge/MCP-2024--11--05-green.svg)](https://modelcontextprotocol.io/)

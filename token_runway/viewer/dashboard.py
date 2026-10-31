@@ -319,7 +319,7 @@ HTML_PAGE = """<!DOCTYPE html>
 class DashboardRequestHandler(BaseHTTPRequestHandler):
     """Zero-dependency HTTP request handler for the Token Runway Web HUD."""
 
-    server_version = "TokenRunway/0.2.1"
+    server_version = "TokenRunway/0.2.2"
 
     def log_message(self, format: str, *args: Any) -> None:
         """Suppress standard HTTP server access logs to keep terminal quiet."""
