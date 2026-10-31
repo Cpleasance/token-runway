@@ -66,6 +66,50 @@ def test_server_reject_invalid_arguments():
     assert resp["error"]["code"] == -32602
     assert "Argument 'strict' must be a boolean" in resp["error"]["message"]
 
+    # 5. Non-dict params
+    resp = server.handle_request({
+        "jsonrpc": "2.0",
+        "id": 14,
+        "method": "tools/call",
+        "params": "not_a_dict",
+    })
+    assert "error" in resp
+    assert resp["error"]["code"] == -32602
+    assert "params' must be a JSON object" in resp["error"]["message"]
+
+    # 6. Non-dict arguments
+    resp = server.handle_request({
+        "jsonrpc": "2.0",
+        "id": 15,
+        "method": "tools/call",
+        "params": {"name": "assess_action", "arguments": [1, 2, 3]},
+    })
+    assert "error" in resp
+    assert resp["error"]["code"] == -32602
+    assert "arguments' must be a JSON object" in resp["error"]["message"]
+
+    # 7. Boolean max_budget (Python bool is subclass of int, must be rejected)
+    resp = server.handle_request({
+        "jsonrpc": "2.0",
+        "id": 16,
+        "method": "tools/call",
+        "params": {"name": "assess_action", "arguments": {"max_budget": True}},
+    })
+    assert "error" in resp
+    assert resp["error"]["code"] == -32602
+    assert "finite number between 0 and 100" in resp["error"]["message"]
+
+    # 8. NaN max_budget
+    resp = server.handle_request({
+        "jsonrpc": "2.0",
+        "id": 17,
+        "method": "tools/call",
+        "params": {"name": "assess_action", "arguments": {"max_budget": float("nan")}},
+    })
+    assert "error" in resp
+    assert resp["error"]["code"] == -32602
+    assert "finite number between 0 and 100" in resp["error"]["message"]
+
 
 def test_server_tools_list():
     server = TokenRunwayServer()

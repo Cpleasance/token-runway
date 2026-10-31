@@ -7,6 +7,7 @@ import sys
 import time
 from typing import Dict, Optional
 
+from token_runway.server.server import SUPPORTED_PROVIDERS
 from token_runway.sources import fetch_all_runways
 from token_runway.sources.base import ProviderReading
 
@@ -95,6 +96,13 @@ def run_watch_loop(
     """Run interactive terminal watch loop."""
     iteration = 0
     prov_filter = provider.lower().strip() if provider else None
+    if prov_filter and prov_filter not in SUPPORTED_PROVIDERS:
+        print(
+            f"\033[91m✖ Error:\033[0m Unknown provider '{provider}'. "
+            f"Supported providers: {', '.join(sorted(SUPPORTED_PROVIDERS))}.",
+            file=sys.stderr,
+        )
+        return
     try:
         while True:
             readings = fetch_all_runways(provider=prov_filter)

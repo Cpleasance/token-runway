@@ -13,7 +13,7 @@ from typing import List, Optional
 
 from token_runway import __version__
 from token_runway.injector.config_injector import get_ide_config_targets, inject_into_file
-from token_runway.server.server import TokenRunwayServer
+from token_runway.server.server import SUPPORTED_PROVIDERS, TokenRunwayServer
 from token_runway.sources import fetch_all_runways
 from token_runway.sources.claude import find_claude_token
 from token_runway.sources.openai_source import find_openai_key
@@ -56,10 +56,21 @@ def cmd_check(
 ) -> int:
     """Print active AI provider quotas as a table or JSON."""
     color = should_use_color(no_color)
-    readings = fetch_all_runways(provider=provider)
 
     if provider:
         prov_clean = provider.lower().strip()
+        if prov_clean not in SUPPORTED_PROVIDERS:
+            err_msg = f"Unknown provider '{provider}'. Supported providers: {', '.join(sorted(SUPPORTED_PROVIDERS))}."
+            if color:
+                print(f"\033[91m✖ Error:\033[0m {err_msg}", file=sys.stderr)
+            else:
+                print(f"Error: {err_msg}", file=sys.stderr)
+            return 1
+    else:
+        prov_clean = None
+
+    readings = fetch_all_runways(provider=prov_clean)
+    if prov_clean:
         readings = {k: v for k, v in readings.items() if k == prov_clean}
 
     if as_json:
@@ -136,6 +147,13 @@ def cmd_doctor(provider: Optional[str] = None, no_color: bool = False) -> int:
     print("\n\033[1m=== Token Runway: Doctor ===\033[0m\n" if color else header)
 
     prov_filter = provider.lower().strip() if provider else None
+    if prov_filter and prov_filter not in SUPPORTED_PROVIDERS:
+        err_msg = f"Unknown provider '{provider}'. Supported providers: {', '.join(sorted(SUPPORTED_PROVIDERS))}."
+        if color:
+            print(f"\033[91m✖ Error:\033[0m {err_msg}", file=sys.stderr)
+        else:
+            print(f"Error: {err_msg}", file=sys.stderr)
+        return 1
 
     # 1. Claude
     if not prov_filter or prov_filter == "claude":
@@ -319,6 +337,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     dashboard_parser.add_argument("--no-open", action="store_true", default=False, help="Do not open browser automatically.")
 
     args = parser.parse_args(argv)
+
+    if getattr(args, "provider", None):
+        prov_clean = args.provider.lower().strip()
+        if prov_clean not in SUPPORTED_PROVIDERS:
+            err_msg = f"Unknown provider '{args.provider}'. Supported providers: {', '.join(sorted(SUPPORTED_PROVIDERS))}."
+            if should_use_color(getattr(args, "no_color", False)):
+                print(f"\033[91m✖ Error:\033[0m {err_msg}", file=sys.stderr)
+            else:
+                print(f"Error: {err_msg}", file=sys.stderr)
+            return 1
 
     if args.command == "check":
         return cmd_check(as_json=args.json, provider=args.provider, no_color=args.no_color)

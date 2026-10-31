@@ -199,9 +199,32 @@ Enforce spending ceilings or maximum quota thresholds:
 # Warn and advise downgrade when utilization exceeds 80%
 uvx token-runway run --max-budget 80
 
-# Strictly reject heavy agent actions once over 80%
+# Return an advisory "reject" verdict once over 80%
 uvx token-runway run --max-budget 80 --strict
 ```
+
+> **Important**: MCP servers provide meta-cognitive telemetry and advisory recommendations. Setting `--strict` causes `assess_action` to return a `"reject"` verdict and actionable mitigation strategies, but the server cannot forcibly terminate client process execution outside the agent's client policies and system prompts.
+
+---
+
+## Telemetry Semantics: Quotas vs. Session Token Counters
+
+Token Runway reports **provider rate-limit windows, monthly quota ceilings, and spend limits**, *not* cumulative prompt token counts:
+- **Measured Quotas**: Rolling time windows (e.g. Claude 5-hour, Gemini weekly) and monthly plan caps (e.g. GitHub Copilot chat/completions) where percent used and reset countdowns are measured directly.
+- **Credit Limits & Spend**: OpenRouter balance tracking where spend vs set credit limit is monitored.
+- **Access & Status Checks**: Endpoints like OpenAI API Key validation report model access and connectivity (`is_quota=False`). When only status telemetry is available, `assess_action` returns an explicit `"unknown"` verdict to avoid false headroom reassurance.
+
+---
+
+## Provider Integration Notes & Known Limitations
+
+Token Runway interfaces with developer tools and APIs using standard, lightweight harvesters:
+- **GitHub Copilot**: Uses `gh api /copilot_internal/user` (an internal endpoint utilized by official Copilot IDE extensions). If GitHub alters this endpoint's schema, Token Runway gracefully reports the provider as unavailable without crashing.
+- **Anthropic Claude**: Reads session tokens from `~/.claude/` or `CLAUDE_CODE_TOKEN`. If your session expires, run `claude` to re-authenticate.
+- **Google Gemini / Antigravity**: Parses JSON telemetry from `agy usage --json`. Requires the Antigravity CLI in `$PATH`.
+- **Google Colab**: Parses stdout of `colab usage`. Requires `colab` CLI in `$PATH`.
+- **OpenRouter**: Uses public endpoint `/api/v1/auth/key`. Unlimited keys report total spend without synthetic quota ceilings.
+- **OpenAI**: Uses `/v1/models` to confirm key validity and tier. Does not report live token consumption.
 
 ---
 

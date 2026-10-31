@@ -48,6 +48,28 @@ jobs:
 
       - name: Test CLI entrypoints
         run: |
+            token-runway --version
+            token-runway doctor --no-color
+            token-runway check --no-color --json
+
+  dist-check:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+          python -m build
+          twine check dist/*
+      - name: Smoke-test installed distribution wheel
+        run: |
+          pip install dist/*.whl
           token-runway --version
           token-runway doctor --no-color
           token-runway check --no-color --json

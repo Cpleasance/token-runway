@@ -233,3 +233,32 @@ def test_parse_openrouter_limited_and_unlimited():
     assert "Rate Limit" in rl.name
     assert rl.used_pct is None
     assert rl.is_quota is False
+
+
+def test_harvester_schema_resilience():
+    # 1. Copilot with missing quota_snapshots
+    broken_copilot = parse_copilot_data({})
+    assert broken_copilot.provider == "copilot"
+    assert broken_copilot.available is False
+
+    # 2. Claude with empty usage
+    empty_claude = parse_claude_usage({})
+    assert empty_claude.provider == "claude"
+    assert len(empty_claude.windows) == 0
+
+    # 3. Gemini with empty command
+    gemini, agy = parse_agy_json({})
+    assert gemini.provider == "gemini"
+    assert len(gemini.windows) == 0
+
+    # 4. Colab with unrecognizable text
+    broken_colab = parse_colab_text("Error: session timed out.")
+    assert broken_colab.provider == "colab"
+    assert broken_colab.available is False
+
+    # 5. OpenRouter with empty data
+    from token_runway.sources.openrouter import parse_openrouter_data
+    broken_or = parse_openrouter_data({})
+    assert broken_or.provider == "openrouter"
+    assert len(broken_or.windows) == 1
+    assert broken_or.windows[0].name == "Cumulative Spend"
