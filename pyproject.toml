@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "token-runway"
-version = "0.1.0"
+version = "0.1.1"
 description = "Model Context Protocol (MCP) server providing real-time token runway, quota, and rate-limit awareness for AI agents."
 readme = "README.md"
 authors = [{ name = "Cory Pleasance" }]
