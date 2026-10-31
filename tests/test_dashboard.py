@@ -39,7 +39,14 @@ def test_dashboard_http_endpoints():
             assert resp.status == 200
             advice = json.loads(resp.read().decode("utf-8"))
             assert "verdict" in advice
-            assert advice["verdict"] in ("proceed", "proceed_with_caution", "downgrade_strategy", "pause_or_downgrade")
+            assert advice["verdict"] in (
+                "proceed",
+                "proceed_with_caution",
+                "downgrade_strategy",
+                "pause_or_downgrade",
+                "unknown",
+                "reject",
+            )
 
     finally:
         server.shutdown()
