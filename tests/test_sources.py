@@ -1,8 +1,20 @@
 from token_runway.sources.base import calculate_minutes_until
-from token_runway.sources.claude import parse_claude_usage
+from token_runway.sources.claude import find_claude_token, parse_claude_usage
 from token_runway.sources.colab import parse_colab_text
 from token_runway.sources.copilot import parse_copilot_data
 from token_runway.sources.gemini import parse_agy_json
+
+
+def test_find_claude_token(monkeypatch):
+    monkeypatch.delenv("CLAUDE_CODE_TOKEN", raising=False)
+    monkeypatch.delenv("ANTHROPIC_ACCESS_TOKEN", raising=False)
+    monkeypatch.delenv("ANTHROPIC_TOKEN", raising=False)
+
+    monkeypatch.setenv("ANTHROPIC_ACCESS_TOKEN", "test-token-123")
+    assert find_claude_token() == "test-token-123"
+
+    monkeypatch.setenv("CLAUDE_CODE_TOKEN", "priority-token-456")
+    assert find_claude_token() == "priority-token-456"
 
 
 def test_calculate_minutes_until():

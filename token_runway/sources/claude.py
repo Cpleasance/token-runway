@@ -21,9 +21,10 @@ MAX_CACHE_AGE_SEC = 900  # 15 minutes
 
 def find_claude_token() -> Optional[str]:
     """Discover active Claude Code OAuth token from standard paths or environment."""
-    env_token = os.environ.get("CLAUDE_CODE_TOKEN")
-    if env_token and env_token.strip():
-        return env_token.strip()
+    for var in ("CLAUDE_CODE_TOKEN", "ANTHROPIC_ACCESS_TOKEN", "ANTHROPIC_TOKEN"):
+        env_token = os.environ.get(var)
+        if env_token and env_token.strip():
+            return env_token.strip()
 
     cfg_token = Path.home() / ".config" / "claude-usage-monitor" / "claude-token"
     if cfg_token.is_file():

@@ -85,7 +85,7 @@ def cmd_doctor() -> int:
     if token:
         print("  \033[92m✔ Claude Code:\033[0m Credentials found")
     else:
-        print("  \033[93m▲ Claude Code:\033[0m No credentials found in ~/.claude/.credentials.json")
+        print("  \033[93m▲ Claude Code:\033[0m No credentials found (log in via `claude` or set CLAUDE_CODE_TOKEN / ANTHROPIC_ACCESS_TOKEN)")
 
     # 2. Antigravity CLI (`agy`)
     if shutil.which("agy"):
