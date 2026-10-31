@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
-from typing import Optional
 
 from token_runway.sources.base import ProviderReading, QuotaWindow
 

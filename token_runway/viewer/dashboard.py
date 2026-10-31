@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import json
-import socket
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Dict, Optional
+from typing import Any
 
 from token_runway.server.advice import evaluate_action_feasibility
 from token_runway.sources import fetch_all_runways
@@ -211,7 +210,9 @@ HTML_PAGE = """<!DOCTYPE html>
       </select>
       <button onclick="runAssessAction()">Assess Feasibility</button>
     </div>
-    <div class="verdict-box" id="verdict-result">Select an action and click "Assess Feasibility" to test Token Runway advice.</div>
+    <div class="verdict-box" id="verdict-result">
+      Select an action and click "Assess Feasibility" to test Token Runway advice.
+    </div>
   </div>
 
   <script>
@@ -237,9 +238,10 @@ HTML_PAGE = """<!DOCTYPE html>
 
         let windowsHtml = '';
         if (!r.available) {
-          windowsHtml = `<div style="color: var(--text-muted); font-size: 13px;">${r.error_message || 'Unavailable'}</div>`;
+          const err = r.error_message || 'Unavailable';
+          windowsHtml = `<div style="color: var(--text-muted); font-size: 13px;">${err}</div>`;
         } else if (!r.windows || r.windows.length === 0) {
-          windowsHtml = `<div style="color: var(--text-muted); font-size: 13px;">No active quota windows reported.</div>`;
+          windowsHtml = '<div style="color: var(--text-muted); font-size: 13px;">No active quotas reported.</div>';
         } else {
           for (const w of r.windows) {
             const pct = w.used_pct != null ? w.used_pct : 0;
@@ -317,7 +319,7 @@ HTML_PAGE = """<!DOCTYPE html>
 class DashboardRequestHandler(BaseHTTPRequestHandler):
     """Zero-dependency HTTP request handler for the Token Runway Web HUD."""
 
-    server_version = "TokenRunway/0.2.0"
+    server_version = "TokenRunway/0.2.1"
 
     def log_message(self, format: str, *args: Any) -> None:
         """Suppress standard HTTP server access logs to keep terminal quiet."""
@@ -380,7 +382,7 @@ def start_dashboard(host: str = "127.0.0.1", port: int = 7890, open_browser: boo
     """Start web dashboard server."""
     server = HTTPServer((host, port), DashboardRequestHandler)
     url = f"http://{host}:{port}/"
-    print(f"\n\033[1;36m=== Token Runway: Web HUD ===\033[0m")
+    print("\n\033[1;36m=== Token Runway: Web HUD ===\033[0m")
     print(f"Dashboard running at: \033[1;32m{url}\033[0m")
     print("Press Ctrl+C to stop.\n")
 

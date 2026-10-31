@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import datetime
-import os
 import sys
 import time
 from typing import Dict, Optional
 
 from token_runway.sources import fetch_all_runways
-from token_runway.sources.base import ProviderReading, QuotaWindow
+from token_runway.sources.base import ProviderReading
 
 
 def render_bar(used_pct: Optional[int], width: int = 16) -> str:
@@ -52,11 +51,10 @@ def format_minutes_short(minutes: Optional[int]) -> str:
 def build_hud_text(readings: Dict[str, ProviderReading]) -> str:
     """Assemble a formatted terminal dashboard snapshot."""
     now_str = datetime.datetime.now().strftime("%H:%M:%S")
-    lines = [
-        f"\033[1;36m=== Token Runway: Live HUD ===\033[0m  \033[90m[Refreshed: {now_str}] (Press Ctrl+C to exit)\033[0m\n"
-    ]
+    header = f"\033[1;36m=== Token Runway: Live HUD ===\033[0m  \033[90m[{now_str}] (Ctrl+C to exit)\033[0m\n"
+    lines = [header]
 
-    for key, r in readings.items():
+    for _key, r in readings.items():
         title = f"\033[1;37m{r.display_name}\033[0m"
         if r.plan:
             title += f" \033[90m[{r.plan}]\033[0m"

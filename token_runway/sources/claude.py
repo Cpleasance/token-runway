@@ -55,8 +55,12 @@ def read_cached_reading() -> Optional[ProviderReading]:
     try:
         data = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
         saved_at = data.get("_saved_at", 0)
-        if (time.time() - saved_at) < MAX_CACHE_AGE_SEC:
-            return parse_claude_usage(data)
+        cache_age = int(time.time() - saved_at)
+        if cache_age < MAX_CACHE_AGE_SEC:
+            reading = parse_claude_usage(data)
+            reading.is_cached = True
+            reading.cache_age_seconds = cache_age
+            return reading
     except Exception:
         pass
     return None

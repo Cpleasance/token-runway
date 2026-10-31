@@ -6,7 +6,7 @@ import json
 import os
 import shutil
 import subprocess
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from token_runway.sources.base import ProviderReading, QuotaWindow, calculate_minutes_until
 

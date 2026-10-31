@@ -7,6 +7,7 @@ import sys
 import time
 from typing import Any, Dict, List, Optional
 
+from token_runway import __version__
 from token_runway.server.advice import evaluate_action_feasibility
 from token_runway.server.protocol import (
     INTERNAL_ERROR,
@@ -20,6 +21,8 @@ from token_runway.server.protocol import (
 )
 from token_runway.sources import fetch_all_runways
 from token_runway.sources.base import ProviderReading
+
+SUPPORTED_PROVIDERS = {"claude", "gemini", "antigravity", "copilot", "colab", "openrouter", "openai"}
 
 
 class TokenRunwayServer:
@@ -37,11 +40,28 @@ class TokenRunwayServer:
         self._cached_readings: Optional[Dict[str, ProviderReading]] = None
         self._cache_time: float = 0.0
 
-    def get_readings(self, force_refresh: bool = False) -> Dict[str, ProviderReading]:
+    def get_readings(
+        self,
+        force_refresh: bool = False,
+        provider: Optional[str] = None,
+    ) -> Dict[str, ProviderReading]:
         now = time.monotonic()
-        if force_refresh or self._cached_readings is None or (now - self._cache_time) > self.cache_ttl:
-            self._cached_readings = fetch_all_runways()
+        if self._cached_readings is None:
+            self._cached_readings = fetch_all_runways(provider=None)
             self._cache_time = now
+            return self._cached_readings
+
+        if force_refresh:
+            if provider:
+                fresh = fetch_all_runways(provider=provider)
+                self._cached_readings.update(fresh)
+            else:
+                self._cached_readings = fetch_all_runways(provider=None)
+                self._cache_time = now
+        elif (now - self._cache_time) > self.cache_ttl:
+            self._cached_readings = fetch_all_runways(provider=None)
+            self._cache_time = now
+
         return self._cached_readings
 
     def handle_request(self, req: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -71,7 +91,7 @@ class TokenRunwayServer:
                     },
                     "serverInfo": {
                         "name": "token-runway",
-                        "version": "0.2.0",
+                        "version": __version__,
                     },
                 },
             )
@@ -104,20 +124,22 @@ class TokenRunwayServer:
             {
                 "name": "check_runway",
                 "description": (
-                    "Inspect current token quotas, utilization percentages, remaining capacity, "
-                    "and reset countdowns across Claude, Gemini, Antigravity, GitHub Copilot, and Colab."
+                    "Inspect current AI provider rate-limit windows, quota utilization percentages, "
+                    "remaining capacity, and reset countdowns across Claude, Gemini, Antigravity, "
+                    "GitHub Copilot, Colab, OpenRouter, and OpenAI. "
+                    "Note: This reflects provider quota windows and rate limits, not session token counts."
                 ),
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "refresh": {
                             "type": "boolean",
-                            "description": "Bypass cache and force an immediate re-fetch from all provider CLIs/APIs.",
+                            "description": "Bypass cache and force an immediate re-fetch from provider CLIs/APIs.",
                             "default": False,
                         },
                         "provider": {
                             "type": "string",
-                            "description": "Optional specific provider to filter ('claude', 'gemini', 'antigravity', 'copilot', 'colab').",
+                            "description": "Optional provider filter ('claude', 'gemini', 'antigravity', 'copilot', 'colab', 'openrouter', 'openai').",
                         },
                     },
                 },
@@ -126,7 +148,7 @@ class TokenRunwayServer:
                 "name": "assess_action",
                 "description": (
                     "Meta-cognitive evaluation of whether a proposed action (e.g. running multiple parallel subagents, "
-                    "reading massive files, or continuous test loops) is justified given current remaining quotas and reset timers."
+                    "reading massive files, or continuous test loops) is justified given current remaining provider quotas and reset timers."
                 ),
                 "inputSchema": {
                     "type": "object",
@@ -144,7 +166,16 @@ class TokenRunwayServer:
                         },
                         "provider": {
                             "type": "string",
-                            "description": "Target provider whose limits you want to evaluate against (optional).",
+                            "description": "Target provider whose limits you want to evaluate against ('claude', 'gemini', etc.).",
+                        },
+                        "max_budget": {
+                            "type": "number",
+                            "description": "Maximum allowed utilization percentage before pausing (0-100).",
+                        },
+                        "strict": {
+                            "type": "boolean",
+                            "description": "If true, strictly reject actions when over budget.",
+                            "default": False,
                         },
                     },
                 },
@@ -156,12 +187,30 @@ class TokenRunwayServer:
         args = params.get("arguments") or {}
 
         if name == "check_runway":
-            force = bool(args.get("refresh", False))
-            provider_filter = args.get("provider")
-            readings = self.get_readings(force_refresh=force)
+            if "refresh" in args:
+                if not isinstance(args["refresh"], bool):
+                    return make_error(req_id, INVALID_PARAMS, "Argument 'refresh' must be a boolean (true/false).")
+                force = args["refresh"]
+            else:
+                force = False
 
-            if provider_filter and provider_filter.lower() in readings:
-                data = {provider_filter.lower(): readings[provider_filter.lower()].to_dict()}
+            provider_filter = args.get("provider")
+            if provider_filter is not None:
+                if not isinstance(provider_filter, str) or not provider_filter.strip():
+                    return make_error(req_id, INVALID_PARAMS, "Argument 'provider' must be a non-empty string.")
+                prov_clean = provider_filter.lower().strip()
+                if prov_clean not in SUPPORTED_PROVIDERS:
+                    return make_error(
+                        req_id,
+                        INVALID_PARAMS,
+                        f"Unknown provider '{provider_filter}'. Supported providers: {', '.join(sorted(SUPPORTED_PROVIDERS))}.",
+                    )
+            else:
+                prov_clean = None
+
+            readings = self.get_readings(force_refresh=force, provider=prov_clean)
+            if prov_clean:
+                data = {prov_clean: readings[prov_clean].to_dict()} if prov_clean in readings else {}
             else:
                 data = {k: v.to_dict() for k, v in readings.items()}
 
@@ -170,16 +219,44 @@ class TokenRunwayServer:
 
         if name == "assess_action":
             action_type = args.get("action_type", "general")
+            if not isinstance(action_type, str) or not action_type.strip():
+                return make_error(req_id, INVALID_PARAMS, "Argument 'action_type' must be a non-empty string.")
+
             intensity = args.get("intensity", "medium")
+            if not isinstance(intensity, str) or intensity.lower() not in ("low", "medium", "high"):
+                return make_error(
+                    req_id,
+                    INVALID_PARAMS,
+                    f"Invalid intensity '{intensity}'. Must be one of: 'low', 'medium', 'high'.",
+                )
+
             provider = args.get("provider")
+            if provider is not None:
+                if not isinstance(provider, str) or not provider.strip():
+                    return make_error(req_id, INVALID_PARAMS, "Argument 'provider' must be a non-empty string.")
+                prov_clean = provider.lower().strip()
+                if prov_clean not in SUPPORTED_PROVIDERS:
+                    return make_error(
+                        req_id,
+                        INVALID_PARAMS,
+                        f"Unknown provider '{provider}'. Supported providers: {', '.join(sorted(SUPPORTED_PROVIDERS))}.",
+                    )
+            else:
+                prov_clean = None
+
             budget_limit = args.get("max_budget", self.max_budget)
+            if budget_limit is not None and (
+                not isinstance(budget_limit, (int, float)) or not (0 <= budget_limit <= 100)
+            ):
+                return make_error(req_id, INVALID_PARAMS, "Argument 'max_budget' must be a number between 0 and 100.")
+
             strict_mode = bool(args.get("strict", self.strict))
             readings = self.get_readings()
             assessment = evaluate_action_feasibility(
                 readings,
                 action_type=action_type,
                 intensity=intensity,
-                target_provider=provider,
+                target_provider=prov_clean,
                 max_budget=budget_limit,
                 strict=strict_mode,
             )
@@ -230,10 +307,12 @@ class TokenRunwayServer:
         if prompt_name == "runway_governance":
             prompt_text = (
                 "You are an AI agent equipped with real-time awareness of your token quotas via Token Runway.\n\n"
-                "Before initiating resource-heavy operations (e.g. fanning out multiple subagents, dumping whole files >500 lines, "
-                "or running unbounded search loops), call `assess_action` or `check_runway`.\n\n"
-                "- If utilization is >=95%: Switch to quota-preserving strategies (surgical line edits, targeted ripgrep, sequential steps).\n"
-                "- If reset is within 20 minutes and quota is high: Defer heavy work and perform lightweight verification.\n"
+                "Before initiating resource-heavy operations (e.g. fanning out multiple subagents, "
+                "dumping whole files >500 lines, or running unbounded search loops), call `assess_action` "
+                "or `check_runway`.\n\n"
+                "- If utilization is >=95%: Switch to quota-preserving strategies (surgical line edits, "
+                "targeted ripgrep, sequential steps).\n"
+                "- If reset is within 20 minutes and quota is high: Defer heavy work and perform local verification.\n"
                 "- If utilization is <80%: You have full operational headroom."
             )
             return make_response(

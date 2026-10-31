@@ -16,27 +16,69 @@ def evaluate_action_feasibility(
     strict: bool = False,
 ) -> Dict[str, Any]:
     """Evaluate whether an agent should proceed with a resource-intensive action."""
-    action_type = action_type.lower()
-    intensity = intensity.lower()
+    action_type = action_type.lower().strip()
+    intensity = intensity.lower().strip()
+
+    # If target_provider is specified, validate it exists in readings
+    if target_provider:
+        target_clean = target_provider.lower().strip()
+        if target_clean not in readings:
+            return {
+                "verdict": "unknown",
+                "max_utilization_pct": None,
+                "bottleneck": None,
+                "analysis": f"Requested provider '{target_provider}' was not found in discovered telemetry.",
+                "preservation_strategies": [
+                    f"Check spelling for '{target_provider}'.",
+                    "Run 'check_runway' to see all active providers.",
+                ],
+                "action_type": action_type,
+                "intensity": intensity,
+            }
+        providers_to_check = [target_clean]
+    else:
+        providers_to_check = list(readings.keys())
 
     # Identify primary active provider constraints
-    providers_to_check = [target_provider] if target_provider and target_provider in readings else list(readings.keys())
-
-    highest_used_pct = 0
+    highest_used_pct = -1
     most_constrained_provider = None
     most_constrained_window = None
     mins_to_reset = None
+    has_valid_window = False
 
     for p_name in providers_to_check:
         reading = readings.get(p_name)
         if not reading or not reading.available:
             continue
         for w in reading.windows:
-            if w.used_pct is not None and w.used_pct > highest_used_pct:
-                highest_used_pct = w.used_pct
-                most_constrained_provider = reading.display_name
-                most_constrained_window = w.name
-                mins_to_reset = w.resets_in_minutes
+            if w.used_pct is not None:
+                has_valid_window = True
+                if w.used_pct > highest_used_pct:
+                    highest_used_pct = w.used_pct
+                    most_constrained_provider = reading.display_name
+                    most_constrained_window = w.name
+                    mins_to_reset = w.resets_in_minutes
+
+    # If no providers were available or none reported usage windows, do NOT falsely report 0% healthy!
+    if not has_valid_window or highest_used_pct < 0:
+        err_msgs = [
+            f"{r.display_name}: {r.error_message}"
+            for r in readings.values()
+            if not r.available and r.error_message
+        ]
+        detail = f" ({'; '.join(err_msgs[:2])})" if err_msgs else ""
+        return {
+            "verdict": "unknown",
+            "max_utilization_pct": None,
+            "bottleneck": None,
+            "analysis": f"No active quota or rate-limit telemetry is currently available{detail}.",
+            "preservation_strategies": [
+                "Cannot verify quota headroom. Proceed conservatively with single-step operations.",
+                "Run 'token-runway doctor' to verify provider tools and credentials.",
+            ],
+            "action_type": action_type,
+            "intensity": intensity,
+        }
 
     recommendation = "proceed"
     strategies: List[str] = []
@@ -72,7 +114,23 @@ def evaluate_action_feasibility(
         strategies.append("Read narrow line ranges (under 100 lines) instead of loading full files into context.")
         strategies.append("Route subagent prompts to lightweight models (Flash/Haiku) if model selection is supported.")
     elif highest_used_pct >= 80:
-        if intensity == "high":
+        # Check action type sensitivity
+        if action_type in ("subagent_fanout", "recursive_loop"):
+            recommendation = "downgrade_strategy"
+            reasoning = (
+                f"Quota is tight ({highest_used_pct}% used on {most_constrained_provider}). "
+                f"Action '{action_type}' multiplies token consumption across workers and risks immediate lockout."
+            )
+            strategies.append("Prohibit parallel subagents. Run steps sequentially on the main agent.")
+        elif action_type in ("targeted_edit", "quick_query") and intensity != "high":
+            # Targeted edits consume very few tokens
+            recommendation = "proceed_with_caution"
+            reasoning = (
+                f"Headroom is tight ({highest_used_pct}% used on {most_constrained_provider}), "
+                f"but '{action_type}' has low token footprint."
+            )
+            strategies.append("Targeted edits allowed. Avoid reading full files into context.")
+        elif intensity == "high":
             recommendation = "downgrade_strategy"
             reasoning = (
                 f"Quota headroom is tight ({highest_used_pct}% used on {most_constrained_provider}). High-intensity operations risk lockouts."
@@ -81,11 +139,18 @@ def evaluate_action_feasibility(
             strategies.append("Summarize long context before launching further turns.")
         else:
             recommendation = "proceed_with_caution"
-            reasoning = f"Headroom is moderate ({highest_used_pct}% used). Standard actions permitted."
+            reasoning = f"Headroom is moderate ({highest_used_pct}% used on {most_constrained_provider}). Standard actions permitted."
             strategies.append("Monitor token usage after this turn.")
+    elif highest_used_pct >= 70 and action_type in ("subagent_fanout", "recursive_loop") and intensity == "high":
+        # Action-type specific safeguard: high-intensity subagent fanouts at 70%+
+        recommendation = "proceed_with_caution"
+        reasoning = (
+            f"Subagent fanouts multiply consumption quickly ({highest_used_pct}% used on {most_constrained_provider})."
+        )
+        strategies.append("Limit parallel subagent count to 2 max.")
     else:
         recommendation = "proceed"
-        reasoning = f"Healthy headroom ({highest_used_pct}% maximum utilization across active providers)."
+        reasoning = f"Healthy headroom ({highest_used_pct}% maximum utilization on {most_constrained_provider})."
         strategies.append("Full operational capacity available for multi-agent workflows and deep research.")
 
     return {
@@ -100,4 +165,6 @@ def evaluate_action_feasibility(
         else None,
         "analysis": reasoning,
         "preservation_strategies": strategies,
+        "action_type": action_type,
+        "intensity": intensity,
     }

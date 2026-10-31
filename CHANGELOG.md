@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-10-31
+
+### Fixed
+- **Uncertainty & Availability Handling**: `assess_action` returns verdict `"unknown"` when all providers are unavailable or reporting no active windows, eliminating false reassurance of 0% utilization.
+- **Strict Tool Argument Validation**: `server.py` validates `refresh` (must be boolean), `intensity` (low/medium/high), `action_type`, `max_budget`, and rejects unknown provider names with JSON-RPC `-32602` (`INVALID_PARAMS`).
+- **Config Overwrite Protection**: `config_injector.py` detects malformed JSON and non-object roots, fails safely without overwriting, and generates an automatic `.bak` backup before modifying.
+- **Centralized Versioning**: Fixed hardcoded versions in `serverInfo` and modules, reading from single source `token_runway.__version__`.
+- **Cache Transparency & Freshness**: Added `is_cached` and `cache_age_seconds` to `ProviderReading` when serving fallback readings during API rate limits.
+- **Ruff Linting**: Cleaned up all Ruff findings across the codebase and added automated Ruff lint job to CI workflow.
+
+### Added
+- **Action-Type Sensitivity in Advice**: Differentiates `subagent_fanout` (high consumption multiplier) from `targeted_edit` (lightweight), adjusting verdict and strategies accordingly.
+- **Provider-Targeted Refreshes**: `fetch_all_runways` and `check_runway` can selectively refresh only the requested provider.
+- **CLI Flags**: Added `--json`, `--no-color`, and `--provider` to `check` and `doctor`.
+
 ## [0.2.0] - 2026-10-31
 
 ### Added
