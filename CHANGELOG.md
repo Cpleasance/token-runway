@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.1] - 2026-10-31
+## [0.2.2] - 2026-10-31
 
 ### Fixed
 - **Uncertainty & Availability Handling**: `assess_action` returns verdict `"unknown"` when all providers are unavailable or reporting no active windows, eliminating false reassurance of 0% utilization.
@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Centralized Versioning**: Fixed hardcoded versions in `serverInfo` and modules, reading from single source `token_runway.__version__`.
 - **Cache Transparency & Freshness**: Added `is_cached` and `cache_age_seconds` to `ProviderReading` when serving fallback readings during API rate limits.
 - **Ruff Linting**: Cleaned up all Ruff findings across the codebase and added automated Ruff lint job to CI workflow.
+- **Test Suite in CI**: Updated test assertions to accommodate environments without configured provider credentials, and verified entry points in CI.
+- **PyPI Release Idempotency**: Added `skip-existing: true` in release workflow.
 
 ### Added
 - **Action-Type Sensitivity in Advice**: Differentiates `subagent_fanout` (high consumption multiplier) from `targeted_edit` (lightweight), adjusting verdict and strategies accordingly.
