@@ -1,6 +1,6 @@
 from pathlib import Path
+
 from token_runway.injector.rules_generator import (
-    RUNWAY_RULE_TEXT,
     START_MARKER,
     generate_rules,
     inject_rules_into_content,

@@ -1,7 +1,7 @@
-import json
 import io
+import json
+
 from token_runway.server.protocol import (
-    INTERNAL_ERROR,
     INVALID_REQUEST,
     make_error,
     make_response,

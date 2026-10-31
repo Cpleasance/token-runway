@@ -38,9 +38,11 @@ class ProviderReading:
     timestamp: str = field(
         default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat()
     )
+    is_cached: bool = False
+    cache_age_seconds: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d = {
             "provider": self.provider,
             "display_name": self.display_name,
             "available": self.available,
@@ -50,6 +52,10 @@ class ProviderReading:
             "windows": [w.to_dict() for w in self.windows],
             "timestamp": self.timestamp,
         }
+        if self.is_cached:
+            d["is_cached"] = True
+            d["cache_age_seconds"] = self.cache_age_seconds
+        return d
 
 
 def calculate_minutes_until(target_time_iso: Optional[str]) -> Optional[int]:

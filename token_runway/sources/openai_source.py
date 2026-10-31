@@ -7,7 +7,7 @@ import os
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from token_runway.sources.base import ProviderReading, QuotaWindow
 

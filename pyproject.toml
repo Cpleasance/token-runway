@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "token-runway"
-version = "0.2.0"
+version = "0.2.1"
 description = "Model Context Protocol (MCP) server providing real-time token runway, quota, and rate-limit awareness for AI agents."
 readme = "README.md"
 authors = [{ name = "Cory Pleasance" }]
@@ -69,7 +69,8 @@ target-version = "py38"
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = ["E", "F", "W", "I", "B"]
+ignore = ["B008", "E501"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["E501"]
+"tests/*" = ["B011"]

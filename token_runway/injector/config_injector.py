@@ -63,10 +63,25 @@ def inject_into_file(path: Path, entry_name: str = "token-runway", mode: str = "
 
     data: Dict[str, Any] = {}
     if path.is_file():
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            data = {}
+        content = path.read_text(encoding="utf-8")
+        if content.strip():
+            try:
+                loaded = json.loads(content)
+            except Exception as e:
+                raise ValueError(
+                    f"Refusing to overwrite malformed JSON in {path}: {e}. "
+                    "Please correct JSON syntax before running inject."
+                ) from e
+
+            if not isinstance(loaded, dict):
+                raise ValueError(
+                    f"Configuration in {path} must have a JSON object at its root, got {type(loaded).__name__}."
+                )
+            data = loaded
+
+            # Create backup of existing config before modifying
+            backup_path = path.with_suffix(path.suffix + ".bak")
+            backup_path.write_text(content, encoding="utf-8")
 
     # Root key is typically "mcpServers"
     if "mcpServers" not in data or not isinstance(data["mcpServers"], dict):

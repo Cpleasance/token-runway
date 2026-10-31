@@ -1,4 +1,4 @@
-import json
+from token_runway import __version__
 from token_runway.server.server import TokenRunwayServer
 from token_runway.sources.base import ProviderReading, QuotaWindow
 
@@ -9,6 +9,51 @@ def test_server_initialize():
     assert resp["jsonrpc"] == "2.0"
     assert resp["id"] == 1
     assert resp["result"]["serverInfo"]["name"] == "token-runway"
+    assert resp["result"]["serverInfo"]["version"] == __version__
+
+
+def test_server_reject_invalid_arguments():
+    server = TokenRunwayServer()
+    server._cached_readings = {
+        "claude": ProviderReading(
+            provider="claude",
+            display_name="Claude",
+            windows=[QuotaWindow(name="5h", used_pct=10)],
+        )
+    }
+
+    # 1. Invalid refresh type (string instead of boolean)
+    resp = server.handle_request({
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "tools/call",
+        "params": {"name": "check_runway", "arguments": {"refresh": "false"}},
+    })
+    assert "error" in resp
+    assert resp["error"]["code"] == -32602
+    assert "refresh' must be a boolean" in resp["error"]["message"]
+
+    # 2. Unknown provider name in check_runway
+    resp = server.handle_request({
+        "jsonrpc": "2.0",
+        "id": 11,
+        "method": "tools/call",
+        "params": {"name": "check_runway", "arguments": {"provider": "unknown_ai"}},
+    })
+    assert "error" in resp
+    assert resp["error"]["code"] == -32602
+    assert "Unknown provider" in resp["error"]["message"]
+
+    # 3. Invalid intensity in assess_action
+    resp = server.handle_request({
+        "jsonrpc": "2.0",
+        "id": 12,
+        "method": "tools/call",
+        "params": {"name": "assess_action", "arguments": {"intensity": "extreme"}},
+    })
+    assert "error" in resp
+    assert resp["error"]["code"] == -32602
+    assert "Invalid intensity" in resp["error"]["message"]
 
 
 def test_server_tools_list():
