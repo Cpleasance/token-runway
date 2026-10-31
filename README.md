@@ -40,13 +40,69 @@ The result? Unplanned `HTTP 429` rate-limit lockouts, stalled workflows, and bur
 
 ## Supported Providers
 
-| Provider | Harvester Source | Metrics Exposed |
-|---|---|---|
-| **Anthropic Claude** | `~/.claude/` credentials & OAuth API | 5-Hour Current utilization %, Weekly 7-Day %, countdowns |
-| **Google Gemini** | Antigravity CLI (`agy`) | Flash/Pro 5-Hour %, Flash/Pro Weekly %, Argon Weekly % |
-| **Antigravity** | Antigravity CLI (`agy`) | Claude & GPT models 5-Hour %, Weekly % |
-| **GitHub Copilot** | GitHub CLI (`gh api /copilot_internal/user`) | Chat Monthly %, Completions %, Plan tier, reset date |
-| **Google Colab** | Colab CLI (`colab usage`) | Compute unit balance, burn rate/hr, active runtimes |
+| Provider | Harvester Source | Metrics Exposed | Setup Command |
+|---|---|---|---|
+| **Anthropic Claude** | `~/.claude/` credentials or `CLAUDE_CODE_TOKEN` | 5-Hour Current utilization %, Weekly 7-Day %, countdowns | `claude` (or `CLAUDE_CODE_TOKEN=...`) |
+| **GitHub Copilot** | GitHub CLI (`gh api /copilot_internal/user`) | Chat Monthly %, Completions %, Plan tier, reset date | `gh auth login` |
+| **Google Gemini** | Antigravity CLI (`agy`) | Flash/Pro 5-Hour %, Flash/Pro Weekly %, Argon Weekly % | `agy` in `$PATH` |
+| **Antigravity** | Antigravity CLI (`agy`) | Claude & GPT models 5-Hour %, Weekly % | `agy` in `$PATH` |
+| **Google Colab** | Colab CLI (`colab usage`) | Compute unit balance, burn rate/hr, active runtimes | `colab` in `$PATH` |
+
+---
+
+## Authentication & Provider Setup
+
+Token Runway is designed around a **Zero Manual Configuration** philosophy: it automatically piggybacks on the tools and sessions you already use every day. You don't need to generate or paste API keys.
+
+### 1. Anthropic Claude
+- **Automatic Discovery**: If you have [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview) installed, simply log in once:
+  ```bash
+  claude
+  ```
+  Token Runway automatically discovers your OAuth token in `~/.claude/.credentials.json`.
+- **Manual / Headless / CI**: If running in an environment without `~/.claude/`, pass your token via the `CLAUDE_CODE_TOKEN` environment variable:
+  ```bash
+  export CLAUDE_CODE_TOKEN="your-oauth-token"
+  ```
+  Or in your MCP client config:
+  ```json
+  {
+    "mcpServers": {
+      "token-runway": {
+        "command": "uvx",
+        "args": ["token-runway"],
+        "env": {
+          "CLAUDE_CODE_TOKEN": "your-oauth-token"
+        }
+      }
+    }
+  }
+  ```
+
+### 2. GitHub Copilot
+- **Automatic Discovery**: Ensure the [GitHub CLI (`gh`)](https://cli.github.com/) is installed and authenticated:
+  ```bash
+  gh auth login
+  ```
+  Token Runway queries GitHub's internal Copilot quota endpoint directly through your `gh` session.
+- **Environment Variable**: Alternatively, export `GH_TOKEN` or `GITHUB_TOKEN` with Copilot permissions:
+  ```bash
+  export GH_TOKEN="ghp_..."
+  ```
+
+### 3. Google Gemini & Antigravity
+- **Automatic Discovery**: Ensure the Antigravity CLI (`agy`) is in your system `$PATH` and logged in. Token Runway polls `agy -p /usage --output-format json` directly.
+
+### 4. Google Colab
+- **Automatic Discovery**: Ensure the `colab` command-line tool is installed and authenticated.
+
+### 5. Check Your Setup: `doctor`
+Whenever you set up or add a new provider, run the doctor command to verify all integrations:
+
+```bash
+uvx token-runway doctor
+```
+It tests every local tool and remote endpoint, reporting exact connection status and active quota windows.
 
 ---
 
