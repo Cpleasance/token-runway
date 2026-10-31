@@ -12,6 +12,8 @@ def evaluate_action_feasibility(
     action_type: str = "general",
     intensity: str = "medium",  # "low", "medium", "high"
     target_provider: Optional[str] = None,
+    max_budget: Optional[float] = None,
+    strict: bool = False,
 ) -> Dict[str, Any]:
     """Evaluate whether an agent should proceed with a resource-intensive action."""
     action_type = action_type.lower()
@@ -40,7 +42,24 @@ def evaluate_action_feasibility(
     strategies: List[str] = []
     reasoning: str = ""
 
-    if highest_used_pct >= 95:
+    # Check user-configured guardrail / spending cap first
+    if max_budget is not None and highest_used_pct >= max_budget:
+        if strict:
+            recommendation = "reject"
+            reasoning = (
+                f"Strict safety guardrail triggered: {highest_used_pct}% utilization on {most_constrained_provider} "
+                f"exceeds configured maximum budget threshold of {max_budget}%."
+            )
+            strategies.append("Action rejected by strict user guardrail. Prohibit execution.")
+            strategies.append("Wait for quota window reset or switch to an alternate provider.")
+        else:
+            recommendation = "pause_or_downgrade"
+            reasoning = (
+                f"Configured budget threshold reached ({highest_used_pct}% >= {max_budget}% limit on {most_constrained_provider})."
+            )
+            strategies.append("Budget limit reached. Pause expensive background operations.")
+            strategies.append("Downgrade task intensity to stay under the budget ceiling.")
+    elif highest_used_pct >= 95:
         recommendation = "pause_or_downgrade"
         reasoning = (
             f"Quota is critically constrained ({highest_used_pct}% used on {most_constrained_provider} {most_constrained_window})."
