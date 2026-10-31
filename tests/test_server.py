@@ -55,6 +55,17 @@ def test_server_reject_invalid_arguments():
     assert resp["error"]["code"] == -32602
     assert "Invalid intensity" in resp["error"]["message"]
 
+    # 4. Invalid strict argument type (string "false" instead of boolean false)
+    resp = server.handle_request({
+        "jsonrpc": "2.0",
+        "id": 13,
+        "method": "tools/call",
+        "params": {"name": "assess_action", "arguments": {"strict": "false"}},
+    })
+    assert "error" in resp
+    assert resp["error"]["code"] == -32602
+    assert "Argument 'strict' must be a boolean" in resp["error"]["message"]
+
 
 def test_server_tools_list():
     server = TokenRunwayServer()

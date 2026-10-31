@@ -1,9 +1,12 @@
 import json
 import threading
+import urllib.error
 import urllib.request
 from http.server import HTTPServer
 
-from token_runway.viewer.dashboard import DashboardRequestHandler
+import pytest
+
+from token_runway.viewer.dashboard import DashboardRequestHandler, start_dashboard
 
 
 def test_dashboard_http_endpoints():
@@ -21,14 +24,27 @@ def test_dashboard_http_endpoints():
             content = resp.read().decode("utf-8")
             assert "Token Runway" in content
             assert "Assess Action Simulator" in content
+            assert resp.headers.get("X-Content-Type-Options") == "nosniff"
+            assert resp.headers.get("X-Frame-Options") == "DENY"
 
-        # 2. GET /api/status
+        # 2. GET /api/status (loopback safe origin)
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/status") as resp:
             assert resp.status == 200
+            assert resp.headers.get("Access-Control-Allow-Origin") is None
             data = json.loads(resp.read().decode("utf-8"))
             assert "readings" in data
 
-        # 3. POST /api/assess
+        # 3. GET /api/status from untrusted external Origin -> 403 Forbidden
+        bad_req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/status",
+            headers={"Origin": "https://malicious.example.com"},
+        )
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(bad_req)
+        assert exc_info.value.code == 403
+        exc_info.value.close()
+
+        # 4. POST /api/assess
         req = urllib.request.Request(
             f"http://127.0.0.1:{port}/api/assess",
             data=json.dumps({"action_type": "targeted_edit", "intensity": "low"}).encode("utf-8"),
@@ -51,3 +67,10 @@ def test_dashboard_http_endpoints():
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_dashboard_loopback_restriction():
+    with pytest.raises(ValueError) as exc:
+        start_dashboard(host="0.0.0.0")
+    assert "prohibited for security" in str(exc.value)
+

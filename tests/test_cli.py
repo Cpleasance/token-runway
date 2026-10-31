@@ -43,3 +43,17 @@ def test_render_bar_and_hud():
 
     hud = build_hud_text({})
     assert "Token Runway: Live HUD" in hud
+
+
+def test_watch_loop_with_provider_filter():
+    from token_runway.viewer.watch import run_watch_loop
+    # Should run 1 iteration without throwing error and exit
+    run_watch_loop(interval=0.1, max_iterations=1, provider="claude")
+
+
+def test_cli_dashboard_prohibits_non_loopback(capsys):
+    ret = main(["dashboard", "--host", "0.0.0.0"])
+    assert ret == 1
+    captured = capsys.readouterr()
+    assert "Security Error" in captured.err
+    assert "loopback-only" in captured.err

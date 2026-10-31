@@ -174,7 +174,10 @@ class TokenRunwayServer:
                         },
                         "strict": {
                             "type": "boolean",
-                            "description": "If true, strictly reject actions when over budget.",
+                            "description": (
+                                "If true, returns an advisory 'reject' verdict when exceeding budget thresholds "
+                                "(advisory recommendation; cannot forcibly prevent execution outside agent client policy)."
+                            ),
                             "default": False,
                         },
                     },
@@ -250,7 +253,12 @@ class TokenRunwayServer:
             ):
                 return make_error(req_id, INVALID_PARAMS, "Argument 'max_budget' must be a number between 0 and 100.")
 
-            strict_mode = bool(args.get("strict", self.strict))
+            if "strict" in args:
+                if not isinstance(args["strict"], bool):
+                    return make_error(req_id, INVALID_PARAMS, "Argument 'strict' must be a boolean (true/false).")
+                strict_mode = args["strict"]
+            else:
+                strict_mode = self.strict
             readings = self.get_readings()
             assessment = evaluate_action_feasibility(
                 readings,

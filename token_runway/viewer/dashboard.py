@@ -216,6 +216,16 @@ HTML_PAGE = """<!DOCTYPE html>
   </div>
 
   <script>
+    function escapeHtml(str) {
+      if (str == null) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     async function loadStatus() {
       try {
         const res = await fetch('/api/status');
@@ -238,7 +248,7 @@ HTML_PAGE = """<!DOCTYPE html>
 
         let windowsHtml = '';
         if (!r.available) {
-          const err = r.error_message || 'Unavailable';
+          const err = escapeHtml(r.error_message || 'Unavailable');
           windowsHtml = `<div style="color: var(--text-muted); font-size: 13px;">${err}</div>`;
         } else if (!r.windows || r.windows.length === 0) {
           windowsHtml = '<div style="color: var(--text-muted); font-size: 13px;">No active quotas reported.</div>';
@@ -251,9 +261,9 @@ HTML_PAGE = """<!DOCTYPE html>
 
             let countInfo = '';
             if (w.remaining_count != null && w.total_entitlement != null) {
-              countInfo = ` [${w.remaining_count}/${w.total_entitlement}]`;
+              countInfo = ` [${escapeHtml(w.remaining_count)}/${escapeHtml(w.total_entitlement)}]`;
             } else if (w.remaining_count != null) {
-              countInfo = ` [${w.remaining_count}]`;
+              countInfo = ` [${escapeHtml(w.remaining_count)}]`;
             }
 
             let countdownStr = '';
@@ -266,7 +276,7 @@ HTML_PAGE = """<!DOCTYPE html>
             windowsHtml += `
               <div class="window-item">
                 <div class="window-meta">
-                  <span class="window-name">${w.name}</span>
+                  <span class="window-name">${escapeHtml(w.name)}</span>
                   <span class="window-val">${w.used_pct != null ? w.used_pct + '%' : '-'}${countInfo}</span>
                 </div>
                 <div class="progress-bar-bg">
@@ -280,8 +290,8 @@ HTML_PAGE = """<!DOCTYPE html>
 
         card.innerHTML = `
           <div class="card-header">
-            <span class="card-title">${r.display_name}</span>
-            ${r.plan ? `<span class="card-plan">${r.plan}</span>` : ''}
+            <span class="card-title">${escapeHtml(r.display_name)}</span>
+            ${r.plan ? `<span class="card-plan">${escapeHtml(r.plan)}</span>` : ''}
           </div>
           ${windowsHtml}
         `;
@@ -316,20 +326,43 @@ HTML_PAGE = """<!DOCTYPE html>
 """
 
 
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
 class DashboardRequestHandler(BaseHTTPRequestHandler):
     """Zero-dependency HTTP request handler for the Token Runway Web HUD."""
 
-    server_version = "TokenRunway/0.2.2"
+    server_version = "TokenRunway/0.2.3"
 
     def log_message(self, format: str, *args: Any) -> None:
         """Suppress standard HTTP server access logs to keep terminal quiet."""
         pass
 
+    def _is_safe_origin(self) -> bool:
+        """Protect against unauthorized cross-origin access from external websites."""
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True
+        try:
+            parsed = urllib.parse.urlparse(origin)
+            return parsed.hostname in LOOPBACK_HOSTS
+        except Exception:
+            return False
+
+    def _send_security_headers(self) -> None:
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+
     def do_GET(self) -> None:
+        if not self._is_safe_origin():
+            self.send_error(403, "Forbidden: Cross-origin access from external origins is blocked.")
+            return
+
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path in ("/", "/index.html"):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self._send_security_headers()
             self.end_headers()
             self.wfile.write(HTML_PAGE.encode("utf-8"))
             return
@@ -342,7 +375,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             body = json.dumps(payload).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
+            self._send_security_headers()
             self.end_headers()
             self.wfile.write(body)
             return
@@ -350,6 +383,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.send_error(404, "Not Found")
 
     def do_POST(self) -> None:
+        if not self._is_safe_origin():
+            self.send_error(403, "Forbidden: Cross-origin access from external origins is blocked.")
+            return
+
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/api/assess":
             length = int(self.headers.get("Content-Length", 0))
@@ -370,7 +407,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             body = json.dumps(advice).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
+            self._send_security_headers()
             self.end_headers()
             self.wfile.write(body)
             return
@@ -379,7 +416,13 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
 
 def start_dashboard(host: str = "127.0.0.1", port: int = 7890, open_browser: bool = True) -> None:
-    """Start web dashboard server."""
+    """Start web dashboard server bound strictly to loopback."""
+    if host not in LOOPBACK_HOSTS:
+        raise ValueError(
+            f"Binding dashboard to '{host}' is prohibited for security. "
+            "The Token Runway dashboard has no authentication mechanism and must run loopback-only (127.0.0.1 / localhost)."
+        )
+
     server = HTTPServer((host, port), DashboardRequestHandler)
     url = f"http://{host}:{port}/"
     print("\n\033[1;36m=== Token Runway: Web HUD ===\033[0m")
