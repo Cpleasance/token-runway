@@ -10,17 +10,24 @@ from token_runway.sources.claude import fetch_claude
 from token_runway.sources.colab import fetch_colab
 from token_runway.sources.copilot import fetch_copilot
 from token_runway.sources.gemini import fetch_gemini_and_antigravity
+from token_runway.sources.openai_source import fetch_openai, find_openai_key
+from token_runway.sources.openrouter import fetch_openrouter, find_openrouter_key
 
 
 def fetch_all_runways(timeout: float = 12.0) -> Dict[str, ProviderReading]:
     """Fetch usage telemetry concurrently across all providers."""
     readings: Dict[str, ProviderReading] = {}
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+    has_openrouter = find_openrouter_key() is not None
+    has_openai = find_openai_key() is not None
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
         f_claude = executor.submit(fetch_claude, timeout)
         f_copilot = executor.submit(fetch_copilot, timeout)
         f_gemini = executor.submit(fetch_gemini_and_antigravity, timeout)
         f_colab = executor.submit(fetch_colab, timeout)
+        f_openrouter = executor.submit(fetch_openrouter) if has_openrouter else None
+        f_openai = executor.submit(fetch_openai) if has_openai else None
 
         # Claude
         try:
@@ -64,5 +71,25 @@ def fetch_all_runways(timeout: float = 12.0) -> Dict[str, ProviderReading]:
             readings["colab"] = ProviderReading(
                 provider="colab", display_name="Google Colab", available=False, error_message=str(e)
             )
+
+        # OpenRouter (if configured)
+        if f_openrouter is not None:
+            try:
+                r = f_openrouter.result()
+                readings["openrouter"] = r
+            except Exception as e:
+                readings["openrouter"] = ProviderReading(
+                    provider="openrouter", display_name="OpenRouter", available=False, error_message=str(e)
+                )
+
+        # OpenAI (if configured)
+        if f_openai is not None:
+            try:
+                r = f_openai.result()
+                readings["openai"] = r
+            except Exception as e:
+                readings["openai"] = ProviderReading(
+                    provider="openai", display_name="OpenAI API", available=False, error_message=str(e)
+                )
 
     return readings

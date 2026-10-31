@@ -3,6 +3,51 @@ from token_runway.sources.claude import find_claude_token, parse_claude_usage
 from token_runway.sources.colab import parse_colab_text
 from token_runway.sources.copilot import parse_copilot_data
 from token_runway.sources.gemini import parse_agy_json
+from token_runway.sources.openai_source import find_openai_key
+from token_runway.sources.openrouter import find_openrouter_key, parse_openrouter_data
+
+
+def test_find_openrouter_and_openai_keys(monkeypatch):
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    assert find_openrouter_key() is None
+    assert find_openai_key() is None
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-v1-test")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-test")
+    assert find_openrouter_key() == "sk-or-v1-test"
+    assert find_openai_key() == "sk-proj-test"
+
+
+def test_parse_openrouter_data():
+    mock_data = {
+        "data": {
+            "label": "Work Key",
+            "usage": 8.50,
+            "limit": 10.00,
+            "is_free_tier": False,
+            "rate_limit": {
+                "requests": 200,
+                "interval": "10s",
+            },
+        }
+    }
+    reading = parse_openrouter_data(mock_data)
+    assert reading.provider == "openrouter"
+    assert reading.account == "Work Key"
+    assert reading.available is True
+    assert len(reading.windows) == 2
+
+    limit_window = reading.windows[0]
+    assert limit_window.name == "Credit Limit"
+    assert limit_window.used_pct == 85
+    assert limit_window.status == "warning"
+    assert limit_window.remaining_count == 1.50
+    assert limit_window.total_entitlement == 10.00
+
+    rate_window = reading.windows[1]
+    assert "Rate Limit" in rate_window.name
+    assert rate_window.remaining_count == 200.0
 
 
 def test_find_claude_token(monkeypatch):

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-10-31
+
+### Added
+- **OpenRouter Harvester**: Credit limit, cumulative spend balance, and rate limit tracking via `/api/v1/auth/key`.
+- **OpenAI API Harvester**: Key authentication validation and model tier accessibility checks via `/v1/models`.
+- **Live Terminal HUD (`token-runway watch`)**: Interactive terminal watch mode (`top` for AI quotas) with ANSI progress bars and countdown timers.
+- **Zero-Dependency Web HUD (`token-runway dashboard`)**: Built-in local dark-mode dashboard at `http://localhost:7890` with real-time polling and an interactive Assess Action Simulator.
+- **Project Rules Generator (`token-runway init-rules`)**: Embeds meta-cognitive self-governance instructions into `CLAUDE.md`, `.cursorrules`, `.windsurfrules`, and `AGENTS.md`.
+- **Safety Guardrails & Strict Throttling**: Support for `--max-budget` and `--strict` to prevent agents from running operations when quota utilization crosses user thresholds.
+
 ## [0.1.1] - 2026-10-31
 
 ### Fixed

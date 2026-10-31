@@ -47,6 +47,8 @@ The result? Unplanned `HTTP 429` rate-limit lockouts, stalled workflows, and bur
 | **Google Gemini** | Antigravity CLI (`agy`) | Flash/Pro 5-Hour %, Flash/Pro Weekly %, Argon Weekly % | `agy` in `$PATH` |
 | **Antigravity** | Antigravity CLI (`agy`) | Claude & GPT models 5-Hour %, Weekly % | `agy` in `$PATH` |
 | **Google Colab** | Colab CLI (`colab usage`) | Compute unit balance, burn rate/hr, active runtimes | `colab` in `$PATH` |
+| **OpenRouter** | OpenRouter Key API | Credit limit, spend balance, rate limit interval | `OPENROUTER_API_KEY=...` |
+| **OpenAI API** | OpenAI Models API | Model tier access, key validation | `OPENAI_API_KEY=...` |
 
 ---
 
@@ -96,7 +98,15 @@ Token Runway is designed around a **Zero Manual Configuration** philosophy: it a
 ### 4. Google Colab
 - **Automatic Discovery**: Ensure the `colab` command-line tool is installed and authenticated.
 
-### 5. Check Your Setup: `doctor`
+### 5. OpenRouter & OpenAI (Optional)
+- Export `OPENROUTER_API_KEY` or `OPENAI_API_KEY`:
+  ```bash
+  export OPENROUTER_API_KEY="sk-or-v1-..."
+  export OPENAI_API_KEY="sk-proj-..."
+  ```
+  Token Runway tracks credit limits, spend, and active model access automatically.
+
+### 6. Check Your Setup: `doctor`
 Whenever you set up or add a new provider, run the doctor command to verify all integrations:
 
 ```bash
@@ -144,12 +154,53 @@ Google Colab
   • Active Runtimes            ✔ OK           [0.0]
 ```
 
-### 2. Auto-Inject into your AI IDEs
+### 2. Live Terminal HUD (`watch`)
+
+Keep a live-updating quota dashboard in a split pane (`top` for AI quotas):
+
+```bash
+uvx token-runway watch
+```
+Displays colored ANSI progress bars (`[████████░░░░] 68%`) and real-time countdown tickers ticking down to the exact reset minute.
+
+### 3. Zero-Dependency Web HUD (`dashboard`)
+
+Launch a local dark-mode browser dashboard on `http://localhost:7890`:
+
+```bash
+uvx token-runway dashboard
+```
+Visual progress meters, live polling, and an interactive **Assess Action Simulator** to test LLM decisions in real time.
+
+### 4. Embed Rules into Projects (`init-rules`)
+
+Embed self-governance instructions into your project repository (`CLAUDE.md`, `.cursorrules`, `.windsurfrules`, `AGENTS.md`):
+
+```bash
+uvx token-runway init-rules
+```
+Instructs coding agents to automatically check `assess_action` before running expensive multi-agent sweeps or loading large files.
+
+### 5. Auto-Inject into your AI IDEs
 
 Token Runway detects your installed AI editors (**Claude Desktop**, **Cursor**, **Claude Code**, **Antigravity**, **Windsurf**) and injects the server configuration in one command:
 
 ```bash
 uvx token-runway inject
+```
+
+---
+
+## Safety Guardrails & Strict Throttling
+
+Enforce spending ceilings or maximum quota thresholds:
+
+```bash
+# Warn and advise downgrade when utilization exceeds 80%
+uvx token-runway run --max-budget 80
+
+# Strictly reject heavy agent actions once over 80%
+uvx token-runway run --max-budget 80 --strict
 ```
 
 ---

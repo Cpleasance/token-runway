@@ -25,8 +25,15 @@ from token_runway.sources.base import ProviderReading
 class TokenRunwayServer:
     """Zero-dependency stdio MCP server exposing token quotas and advice."""
 
-    def __init__(self, cache_ttl: float = 30.0):
+    def __init__(
+        self,
+        cache_ttl: float = 30.0,
+        max_budget: Optional[float] = None,
+        strict: bool = False,
+    ):
         self.cache_ttl = cache_ttl
+        self.max_budget = max_budget
+        self.strict = strict
         self._cached_readings: Optional[Dict[str, ProviderReading]] = None
         self._cache_time: float = 0.0
 
@@ -64,7 +71,7 @@ class TokenRunwayServer:
                     },
                     "serverInfo": {
                         "name": "token-runway",
-                        "version": "0.1.0",
+                        "version": "0.2.0",
                     },
                 },
             )
@@ -165,8 +172,17 @@ class TokenRunwayServer:
             action_type = args.get("action_type", "general")
             intensity = args.get("intensity", "medium")
             provider = args.get("provider")
+            budget_limit = args.get("max_budget", self.max_budget)
+            strict_mode = bool(args.get("strict", self.strict))
             readings = self.get_readings()
-            assessment = evaluate_action_feasibility(readings, action_type, intensity, provider)
+            assessment = evaluate_action_feasibility(
+                readings,
+                action_type=action_type,
+                intensity=intensity,
+                target_provider=provider,
+                max_budget=budget_limit,
+                strict=strict_mode,
+            )
             text = json.dumps(assessment, indent=2)
             return make_response(req_id, {"content": [{"type": "text", "text": text}]})
 
