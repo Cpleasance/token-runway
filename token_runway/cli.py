@@ -12,7 +12,7 @@ from token_runway.server import TokenRunwayServer
 from token_runway.sources import fetch_all_runways
 from token_runway.sources.claude import find_claude_token
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 
 def format_status_badge(status: str) -> str:
