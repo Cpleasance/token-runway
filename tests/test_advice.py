@@ -79,6 +79,30 @@ def test_evaluate_action_unavailable_telemetry():
     assert "No active quota" in advice["analysis"]
 
 
+def test_evaluate_action_status_only_telemetry():
+    # Status-only telemetry (e.g. OpenAI model access or unlimited OpenRouter key)
+    # must NOT report false headroom or a "proceed" verdict.
+    readings = {
+        "openai": ProviderReading(
+            provider="openai",
+            display_name="OpenAI API",
+            available=True,
+            windows=[
+                QuotaWindow(
+                    name="API Key Access",
+                    used_pct=None,
+                    status="active",
+                    is_quota=False,
+                )
+            ],
+        )
+    }
+    advice = evaluate_action_feasibility(readings, action_type="subagent_fanout")
+    assert advice["verdict"] == "unknown"
+    assert advice["max_utilization_pct"] is None
+    assert "reflects account status or API key access" in advice["analysis"]
+
+
 def test_evaluate_action_unknown_provider():
     readings = {
         "claude": ProviderReading(

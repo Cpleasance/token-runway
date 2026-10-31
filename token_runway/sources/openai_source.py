@@ -9,6 +9,7 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+from token_runway import __version__
 from token_runway.sources.base import ProviderReading, QuotaWindow
 
 OPENAI_MODELS_URL = "https://api.openai.com/v1/models"
@@ -49,7 +50,7 @@ def fetch_openai(key: Optional[str] = None) -> ProviderReading:
         OPENAI_MODELS_URL,
         headers={
             "Authorization": f"Bearer {api_key}",
-            "User-Agent": "token-runway/0.1.1",
+            "User-Agent": f"token-runway/{__version__}",
         },
     )
 
@@ -62,13 +63,14 @@ def fetch_openai(key: Optional[str] = None) -> ProviderReading:
             windows = [
                 QuotaWindow(
                     name="API Key Access",
-                    used_pct=0,
-                    remaining_pct=100.0,
+                    used_pct=None,
+                    remaining_pct=None,
                     resets_in_minutes=None,
                     resets_at=None,
-                    status="ok",
+                    status="active",
                     remaining_count=float(len(models)),
                     total_entitlement=None,
+                    is_quota=False,
                 )
             ]
 

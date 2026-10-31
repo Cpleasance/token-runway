@@ -51,7 +51,7 @@ def evaluate_action_feasibility(
         if not reading or not reading.available:
             continue
         for w in reading.windows:
-            if w.used_pct is not None:
+            if getattr(w, "is_quota", True) and w.used_pct is not None:
                 has_valid_window = True
                 if w.used_pct > highest_used_pct:
                     highest_used_pct = w.used_pct
@@ -61,17 +61,30 @@ def evaluate_action_feasibility(
 
     # If no providers were available or none reported usage windows, do NOT falsely report 0% healthy!
     if not has_valid_window or highest_used_pct < 0:
-        err_msgs = [
-            f"{r.display_name}: {r.error_message}"
+        status_only_providers = [
+            r.display_name
             for r in readings.values()
-            if not r.available and r.error_message
+            if r.available and r.windows and all(not getattr(w, "is_quota", True) for w in r.windows)
         ]
-        detail = f" ({'; '.join(err_msgs[:2])})" if err_msgs else ""
+        if status_only_providers:
+            analysis = (
+                f"Discovered telemetry for {', '.join(status_only_providers)} reflects account status or API key access, "
+                "not consumable quota or rate-limit usage. Action headroom is unknown."
+            )
+        else:
+            err_msgs = [
+                f"{r.display_name}: {r.error_message}"
+                for r in readings.values()
+                if not r.available and r.error_message
+            ]
+            detail = f" ({'; '.join(err_msgs[:2])})" if err_msgs else ""
+            analysis = f"No active quota or rate-limit telemetry is currently available{detail}."
+
         return {
             "verdict": "unknown",
             "max_utilization_pct": None,
             "bottleneck": None,
-            "analysis": f"No active quota or rate-limit telemetry is currently available{detail}.",
+            "analysis": analysis,
             "preservation_strategies": [
                 "Cannot verify quota headroom. Proceed conservatively with single-step operations.",
                 "Run 'token-runway doctor' to verify provider tools and credentials.",

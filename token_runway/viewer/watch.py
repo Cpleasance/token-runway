@@ -87,12 +87,19 @@ def build_hud_text(readings: Dict[str, ProviderReading]) -> str:
     return "\n".join(lines)
 
 
-def run_watch_loop(interval: float = 5.0, max_iterations: Optional[int] = None) -> None:
+def run_watch_loop(
+    interval: float = 5.0,
+    max_iterations: Optional[int] = None,
+    provider: Optional[str] = None,
+) -> None:
     """Run interactive terminal watch loop."""
     iteration = 0
+    prov_filter = provider.lower().strip() if provider else None
     try:
         while True:
-            readings = fetch_all_runways()
+            readings = fetch_all_runways(provider=prov_filter)
+            if prov_filter:
+                readings = {k: v for k, v in readings.items() if k == prov_filter}
             hud = build_hud_text(readings)
 
             # Clear screen and place cursor at row 1, col 1

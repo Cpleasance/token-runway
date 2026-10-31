@@ -9,6 +9,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from token_runway import __version__
 from token_runway.sources.base import ProviderReading, QuotaWindow
 
 OPENROUTER_KEY_URL = "https://openrouter.ai/api/v1/auth/key"
@@ -72,17 +73,18 @@ def parse_openrouter_data(data: Dict[str, Any]) -> ProviderReading:
             )
         )
     else:
-        # Unlimited key - track total usage
+        # Unlimited key - track total usage without false quota assumptions
         windows.append(
             QuotaWindow(
                 name="Cumulative Spend",
-                used_pct=0,
-                remaining_pct=100.0,
+                used_pct=None,
+                remaining_pct=None,
                 resets_in_minutes=None,
                 resets_at=None,
-                status="ok",
+                status="unlimited",
                 remaining_count=round(usage, 4),
                 total_entitlement=None,
+                is_quota=False,
             )
         )
 
@@ -93,13 +95,14 @@ def parse_openrouter_data(data: Dict[str, Any]) -> ProviderReading:
             windows.append(
                 QuotaWindow(
                     name=f"Rate Limit ({interval})",
-                    used_pct=0,
-                    remaining_pct=100.0,
+                    used_pct=None,
+                    remaining_pct=None,
                     resets_in_minutes=None,
                     resets_at=None,
                     status="ok",
                     remaining_count=float(reqs),
                     total_entitlement=float(reqs),
+                    is_quota=False,
                 )
             )
 
@@ -128,7 +131,7 @@ def fetch_openrouter(key: Optional[str] = None) -> ProviderReading:
         OPENROUTER_KEY_URL,
         headers={
             "Authorization": f"Bearer {api_key}",
-            "User-Agent": "token-runway/0.1.1",
+            "User-Agent": f"token-runway/{__version__}",
         },
     )
 

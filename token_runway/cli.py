@@ -326,12 +326,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         return cmd_doctor(provider=args.provider, no_color=args.no_color)
     elif args.command == "watch":
         from token_runway.viewer.watch import run_watch_loop
-        run_watch_loop(interval=args.interval)
+        run_watch_loop(interval=args.interval, provider=args.provider)
         return 0
     elif args.command == "dashboard":
         from token_runway.viewer.dashboard import start_dashboard
-        start_dashboard(host=args.host, port=args.port, open_browser=not args.no_open)
-        return 0
+        try:
+            start_dashboard(host=args.host, port=args.port, open_browser=not args.no_open)
+            return 0
+        except ValueError as e:
+            print(f"\033[91m✖ Security Error:\033[0m {e}", file=sys.stderr)
+            return 1
     elif args.command == "inject":
         return cmd_inject(mode=args.mode)
     elif args.command == "init-rules":

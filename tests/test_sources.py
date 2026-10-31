@@ -190,3 +190,46 @@ Active assignments: 1
     assert reading.windows[0].remaining_count == 450.25
     assert reading.windows[1].remaining_count == 1.50
     assert reading.windows[2].remaining_count == 1.0
+
+
+def test_parse_openrouter_limited_and_unlimited():
+    from token_runway.sources.openrouter import parse_openrouter_data
+
+    # 1. Limited key with credit limit -> is_quota=True
+    limited_raw = {
+        "data": {
+            "label": "My Key",
+            "usage": 25.0,
+            "limit": 100.0,
+            "is_free_tier": False,
+        }
+    }
+    reading = parse_openrouter_data(limited_raw)
+    assert reading.provider == "openrouter"
+    assert len(reading.windows) == 1
+    w = reading.windows[0]
+    assert w.name == "Credit Limit"
+    assert w.used_pct == 25
+    assert w.is_quota is True
+
+    # 2. Unlimited key -> is_quota=False, used_pct=None
+    unlimited_raw = {
+        "data": {
+            "label": "Unlimited Key",
+            "usage": 42.50,
+            "limit": None,
+            "is_free_tier": False,
+            "rate_limit": {"requests": 200, "interval": "10s"},
+        }
+    }
+    reading_unlim = parse_openrouter_data(unlimited_raw)
+    assert len(reading_unlim.windows) == 2
+    spend = reading_unlim.windows[0]
+    assert spend.name == "Cumulative Spend"
+    assert spend.used_pct is None
+    assert spend.is_quota is False
+
+    rl = reading_unlim.windows[1]
+    assert "Rate Limit" in rl.name
+    assert rl.used_pct is None
+    assert rl.is_quota is False

@@ -19,6 +19,7 @@ class QuotaWindow:
     resets_at: Optional[str] = None
     resets_in_minutes: Optional[int] = None
     status: str = "ok"  # "ok", "warning", "exhausted", "not_on_plan", "unlimited", "unknown"
+    is_quota: bool = True
 
     def to_dict(self) -> Dict[str, Any]:
         return {k: v for k, v in asdict(self).items() if v is not None}

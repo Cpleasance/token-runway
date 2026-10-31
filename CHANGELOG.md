@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-10-31
+
+### Fixed
+- **Advice Headroom Distinction**: Distinguishes consumable quota/rate-limit windows from account access/status windows. OpenAI API model access and unlimited OpenRouter keys no longer report false 0% utilization or trigger false "proceed" verdicts; `assess_action` returns explicit `"unknown"` when only status telemetry is available.
+- **Strict Mode Type Validation**: Validates `strict` parameter type strictly as boolean in `assess_action` tool calls, rejecting string `"false"` with JSON-RPC `-32602` (`INVALID_PARAMS`). Clarified tool schema that MCP verdicts are advisory recommendations.
+- **Dashboard Security & Exposure**: Enforced loopback-only binding (`127.0.0.1` / `localhost` / `::1`), removed wildcard CORS header, added origin validation blocking external websites, added security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`), and sanitized all dynamic UI strings with `escapeHtml`.
+- **CLI Watch Provider Filter**: Fixed `--provider` filter in `token-runway watch` so provider targeting is properly passed to the live watch loop.
+
 ## [0.2.2] - 2026-10-31
 
 ### Fixed
