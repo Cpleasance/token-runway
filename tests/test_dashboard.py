@@ -44,7 +44,7 @@ def test_dashboard_http_endpoints():
         assert exc_info.value.code == 403
         exc_info.value.close()
 
-        # 4. POST /api/assess
+        # 4. POST /api/assess (valid)
         req = urllib.request.Request(
             f"http://127.0.0.1:{port}/api/assess",
             data=json.dumps({"action_type": "targeted_edit", "intensity": "low"}).encode("utf-8"),
@@ -63,6 +63,67 @@ def test_dashboard_http_endpoints():
                 "unknown",
                 "reject",
             )
+
+        # 5. POST /api/assess with malformed JSON -> 400
+        req_bad_json = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/assess",
+            data=b"not valid json {{{",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(req_bad_json)
+        assert exc_info.value.code == 400
+        exc_info.value.close()
+
+        # 6. POST /api/assess with non-dict JSON -> 400
+        req_arr_json = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/assess",
+            data=json.dumps([1, 2, 3]).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(req_arr_json)
+        assert exc_info.value.code == 400
+        exc_info.value.close()
+
+        # 7. POST /api/assess with invalid intensity -> 400
+        req_bad_int = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/assess",
+            data=json.dumps({"intensity": "extreme"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(req_bad_int)
+        assert exc_info.value.code == 400
+        exc_info.value.close()
+
+        # 8. POST /api/assess with unknown provider -> 400
+        req_bad_prov = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/assess",
+            data=json.dumps({"provider": "unknown_ai"}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(req_bad_prov)
+        assert exc_info.value.code == 400
+        exc_info.value.close()
+
+        # 9. POST /api/assess with oversized body (>64KB) -> 413
+        oversized_data = b"x" * (65 * 1024)
+        req_huge = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/assess",
+            data=oversized_data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(req_huge)
+        assert exc_info.value.code == 413
+        exc_info.value.close()
 
     finally:
         server.shutdown()

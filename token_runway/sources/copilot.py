@@ -25,6 +25,10 @@ def parse_copilot_data(data: Dict[str, Any]) -> ProviderReading:
     mins_until_reset = calculate_minutes_until(reset_utc)
 
     snapshots = data.get("quota_snapshots") or {}
+    if not snapshots and "login" not in data:
+        reading.available = False
+        reading.error_message = "Unexpected Copilot user response format"
+        return reading
 
     # 1. Chat Monthly
     chat = snapshots.get("chat")

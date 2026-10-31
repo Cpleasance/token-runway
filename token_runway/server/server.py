@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import sys
 import time
 from typing import Any, Dict, List, Optional
@@ -70,7 +71,13 @@ class TokenRunwayServer:
 
         method = req.get("method")
         req_id = req.get("id")
-        params = req.get("params") or {}
+
+        if "params" in req:
+            if not isinstance(req["params"], dict):
+                return make_error(req_id, INVALID_PARAMS, "Field 'params' must be a JSON object.")
+            params = req["params"]
+        else:
+            params = {}
 
         # Notifications (no id)
         if req_id is None:
@@ -186,7 +193,15 @@ class TokenRunwayServer:
         ]
 
     def _call_tool(self, req_id: Any, params: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(params, dict):
+            return make_error(req_id, INVALID_PARAMS, "Field 'params' must be a JSON object.")
+
         name = params.get("name")
+        if not isinstance(name, str) or not name.strip():
+            return make_error(req_id, INVALID_PARAMS, "Field 'name' must be a non-empty string.")
+
+        if "arguments" in params and not isinstance(params["arguments"], dict):
+            return make_error(req_id, INVALID_PARAMS, "Field 'arguments' must be a JSON object.")
         args = params.get("arguments") or {}
 
         if name == "check_runway":
@@ -249,9 +264,17 @@ class TokenRunwayServer:
 
             budget_limit = args.get("max_budget", self.max_budget)
             if budget_limit is not None and (
-                not isinstance(budget_limit, (int, float)) or not (0 <= budget_limit <= 100)
+                isinstance(budget_limit, bool)
+                or not isinstance(budget_limit, (int, float))
+                or math.isnan(budget_limit)
+                or math.isinf(budget_limit)
+                or not (0 <= budget_limit <= 100)
             ):
-                return make_error(req_id, INVALID_PARAMS, "Argument 'max_budget' must be a number between 0 and 100.")
+                return make_error(
+                    req_id,
+                    INVALID_PARAMS,
+                    "Argument 'max_budget' must be a finite number between 0 and 100.",
+                )
 
             if "strict" in args:
                 if not isinstance(args["strict"], bool):
@@ -284,6 +307,8 @@ class TokenRunwayServer:
         ]
 
     def _read_resource(self, req_id: Any, params: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(params, dict):
+            return make_error(req_id, INVALID_PARAMS, "Field 'params' must be a JSON object.")
         uri = params.get("uri")
         if uri == "runway://status":
             readings = self.get_readings()
@@ -311,6 +336,8 @@ class TokenRunwayServer:
         ]
 
     def _get_prompt(self, req_id: Any, params: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(params, dict):
+            return make_error(req_id, INVALID_PARAMS, "Field 'params' must be a JSON object.")
         prompt_name = params.get("name")
         if prompt_name == "runway_governance":
             prompt_text = (

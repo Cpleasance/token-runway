@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any
+from typing import Any, Dict, Optional
 
 from token_runway.server.advice import evaluate_action_feasibility
+from token_runway.server.server import SUPPORTED_PROVIDERS
 from token_runway.sources import fetch_all_runways
+from token_runway.sources.base import ProviderReading
 
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="en">
@@ -183,9 +186,14 @@ HTML_PAGE = """<!DOCTYPE html>
 </head>
 <body>
   <div class="header">
-    <div class="title">
-      <span>🛫 Token Runway</span>
-      <span class="status-badge" id="live-indicator">LIVE POLLING (5s)</span>
+    <div>
+      <div class="title">
+        <span>🛫 Token Runway</span>
+        <span class="status-badge" id="live-indicator">LIVE POLLING (5s)</span>
+      </div>
+      <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
+        Real-time provider rate-limit windows, quotas & credit limits. (Does not tally session token volume).
+      </div>
     </div>
     <div style="font-size: 13px; color: var(--text-muted);" id="last-updated">Updating...</div>
   </div>
@@ -327,12 +335,26 @@ HTML_PAGE = """<!DOCTYPE html>
 
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+MAX_REQUEST_BODY_SIZE = 64 * 1024  # 64 KB maximum payload limit
 
 
 class DashboardRequestHandler(BaseHTTPRequestHandler):
     """Zero-dependency HTTP request handler for the Token Runway Web HUD."""
 
-    server_version = "TokenRunway/0.2.3"
+    server_version = "TokenRunway/0.2.4"
+    _cached_readings: Optional[Dict[str, ProviderReading]] = None
+    _cache_timestamp: float = 0.0
+    _cache_ttl: float = 4.0
+
+    @classmethod
+    def _get_cached_readings(cls, max_age: float = 4.0) -> Dict[str, ProviderReading]:
+        """Serve cached snapshot to avoid flooding provider CLIs/APIs on rapid polling."""
+        now = time.time()
+        if cls._cached_readings is not None and (now - cls._cache_timestamp) < max_age:
+            return cls._cached_readings
+        cls._cached_readings = fetch_all_runways()
+        cls._cache_timestamp = now
+        return cls._cached_readings
 
     def log_message(self, format: str, *args: Any) -> None:
         """Suppress standard HTTP server access logs to keep terminal quiet."""
@@ -353,6 +375,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
 
+    def _send_json_error(self, code: int, message: str) -> None:
+        """Return standardized JSON error response."""
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self._send_security_headers()
+        self.end_headers()
+        self.wfile.write(json.dumps({"error": message}).encode("utf-8"))
+
     def do_GET(self) -> None:
         if not self._is_safe_origin():
             self.send_error(403, "Forbidden: Cross-origin access from external origins is blocked.")
@@ -368,7 +398,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/status":
-            readings = fetch_all_runways()
+            readings = self._get_cached_readings()
             payload = {
                 "readings": {k: v.to_dict() for k, v in readings.items()},
             }
@@ -389,19 +419,66 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/api/assess":
-            length = int(self.headers.get("Content-Length", 0))
+            # 1. Enforce content-length limits
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+            except (ValueError, TypeError):
+                self._send_json_error(400, "Invalid Content-Length header.")
+                return
+
+            if length < 0:
+                self._send_json_error(400, "Invalid Content-Length header.")
+                return
+
+            if length > MAX_REQUEST_BODY_SIZE:
+                self._send_json_error(413, "Payload exceeds maximum allowed size (64KB).")
+                return
+
             raw_body = self.rfile.read(length) if length > 0 else b"{}"
+
+            # 2. Validate JSON syntax and structure
             try:
                 data = json.loads(raw_body.decode("utf-8"))
             except Exception:
-                data = {}
+                self._send_json_error(400, "Malformed JSON payload.")
+                return
 
-            readings = fetch_all_runways()
+            if not isinstance(data, dict):
+                self._send_json_error(400, "Request body must be a JSON object.")
+                return
+
+            # 3. Validate parameter types and values
+            action_type = data.get("action_type", "general")
+            if not isinstance(action_type, str) or not action_type.strip():
+                self._send_json_error(400, "Field 'action_type' must be a non-empty string.")
+                return
+
+            intensity = data.get("intensity", "medium")
+            if not isinstance(intensity, str) or intensity.lower() not in ("low", "medium", "high"):
+                self._send_json_error(400, "Field 'intensity' must be one of: 'low', 'medium', 'high'.")
+                return
+
+            provider = data.get("provider")
+            if provider is not None:
+                if not isinstance(provider, str) or not provider.strip():
+                    self._send_json_error(400, "Field 'provider' must be a non-empty string.")
+                    return
+                prov_clean = provider.lower().strip()
+                if prov_clean not in SUPPORTED_PROVIDERS:
+                    self._send_json_error(
+                        400,
+                        f"Unknown provider '{provider}'. Supported providers: {', '.join(sorted(SUPPORTED_PROVIDERS))}.",
+                    )
+                    return
+            else:
+                prov_clean = None
+
+            readings = self._get_cached_readings()
             advice = evaluate_action_feasibility(
                 readings,
-                action_type=data.get("action_type", "general"),
-                intensity=data.get("intensity", "medium"),
-                target_provider=data.get("provider"),
+                action_type=action_type,
+                intensity=intensity,
+                target_provider=prov_clean,
             )
 
             body = json.dumps(advice).encode("utf-8")

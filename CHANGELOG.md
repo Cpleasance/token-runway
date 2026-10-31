@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] - 2026-10-31
+
+### Fixed
+- **Dashboard Request Validation & Caching**: Added strict payload validation to `/api/assess` (returns 400 for malformed JSON, non-object roots, invalid field types/values), enforced a 64KB request body size limit (returns 413 for oversized payloads), and added a 4-second snapshot cache on `/api/status` to prevent rapid browser re-polling from triggering redundant CLI/network operations.
+- **MCP Shape & Numeric Validation**: Hardened JSON-RPC parsing in `server.py` to reject non-object `params` and `arguments` with `-32602`. Strictly validated `max_budget` to require a finite number (rejecting Python `bool` types, `NaN`, and `Inf`).
+- **CLI Unknown Provider Handling**: `check`, `doctor`, and `watch` now explicitly validate provider filters and return exit code 1 with actionable guidance when an unknown provider is specified.
+- **Deterministic CLI Tests**: Mocked provider telemetry in CLI tests to ensure complete determinism across CI environments without credential or network dependency.
+- **Documentation Alignment**: Corrected the README to reflect that strict mode returns an advisory `"reject"` verdict (MCP recommendations cannot force process termination outside agent client policy). Added comprehensive explanations of quota window semantics and provider integration fragility notes.
+
+### Added
+- **Distribution Smoke-Testing in CI**: Added a `dist-check` job to GitHub Actions verifying `python -m build`, `twine check`, and isolated smoke tests of the built wheel artifact.
+- **Harvester Schema Resilience Tests**: Added fixture tests covering missing, altered, or malformed schema payloads across Copilot, Claude, Gemini, Colab, and OpenRouter harvesters.
+
 ## [0.2.3] - 2026-10-31
 
 ### Fixed
