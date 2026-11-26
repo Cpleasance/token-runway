@@ -1,12 +1,12 @@
-# Token Runway 🛫
+# Token Runway 🛫 — Live Token & Rate-Limit Budget Guard for Claude Code & Cursor
 
 [![PyPI version](https://badge.fury.io/py/token-runway.svg)](https://pypi.org/project/token-runway/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![MCP](https://img.shields.io/badge/MCP-2024--11--05-green.svg)](https://modelcontextprotocol.io/)
 
-> **Real-time token runway & rate-limit awareness for AI agents.**  
-> Give LLMs the self-awareness to weigh whether their actions are justified before exhausting your quotas.
+> **Real-time token runway & rate-limit awareness for AI coding agents (Claude Code, Cursor, Windsurf, Antigravity).**  
+> Give LLMs the self-awareness to weigh whether their actions are justified before exhausting your 5-hour or weekly quotas.
 
 ---
 
