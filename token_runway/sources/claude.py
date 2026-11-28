@@ -67,12 +67,15 @@ def read_cached_reading() -> Optional[ProviderReading]:
 
 
 def write_cached_reading(data: Dict[str, Any]) -> None:
-    """Save last good response to cache."""
+    """Save last good response to cache with secure user-only permissions."""
     try:
-        CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CACHE_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         to_save = dict(data)
         to_save["_saved_at"] = time.time()
-        CACHE_PATH.write_text(json.dumps(to_save), encoding="utf-8")
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        fd = os.open(CACHE_PATH, flags, 0o600)
+        with open(fd, "w", encoding="utf-8") as f:
+            json.dump(to_save, f)
     except Exception:
         pass
 

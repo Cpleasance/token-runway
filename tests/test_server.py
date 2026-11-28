@@ -150,3 +150,17 @@ def test_server_resources_and_prompts():
         {"jsonrpc": "2.0", "id": 6, "method": "prompts/get", "params": {"name": "runway_governance"}}
     )
     assert "messages" in p_get["result"]
+
+    # Invalid prompt name validation
+    p_bad = server.handle_request(
+        {"jsonrpc": "2.0", "id": 7, "method": "prompts/get", "params": {"name": 123}}
+    )
+    assert p_bad["error"]["code"] == -32602
+    assert "non-empty string" in p_bad["error"]["message"]
+
+    # Invalid resource URI validation
+    r_bad = server.handle_request(
+        {"jsonrpc": "2.0", "id": 8, "method": "resources/read", "params": {"uri": None}}
+    )
+    assert r_bad["error"]["code"] == -32602
+    assert "non-empty string" in r_bad["error"]["message"]

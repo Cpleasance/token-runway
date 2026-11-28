@@ -16,6 +16,7 @@ from token_runway.server.protocol import (
     INVALID_REQUEST,
     MCP_PROTOCOL_VERSION,
     METHOD_NOT_FOUND,
+    PARSE_ERROR,
     make_error,
     make_response,
     write_message,
@@ -310,6 +311,8 @@ class TokenRunwayServer:
         if not isinstance(params, dict):
             return make_error(req_id, INVALID_PARAMS, "Field 'params' must be a JSON object.")
         uri = params.get("uri")
+        if not isinstance(uri, str) or not uri.strip():
+            return make_error(req_id, INVALID_PARAMS, "Field 'uri' must be a non-empty string.")
         if uri == "runway://status":
             readings = self.get_readings()
             data = {k: v.to_dict() for k, v in readings.items()}
@@ -339,6 +342,8 @@ class TokenRunwayServer:
         if not isinstance(params, dict):
             return make_error(req_id, INVALID_PARAMS, "Field 'params' must be a JSON object.")
         prompt_name = params.get("name")
+        if not isinstance(prompt_name, str) or not prompt_name.strip():
+            return make_error(req_id, INVALID_PARAMS, "Field 'name' must be a non-empty string.")
         if prompt_name == "runway_governance":
             prompt_text = (
                 "You are an AI agent equipped with real-time awareness of your token quotas via Token Runway.\n\n"
@@ -364,16 +369,19 @@ class TokenRunwayServer:
             )
         return make_error(req_id, INVALID_PARAMS, f"Unknown prompt: {prompt_name}")
 
-    def run_stdio(self) -> None:
+    def run_stdio(self, max_message_size: int = 1024 * 1024) -> None:
         """Run the MCP server event loop over standard input and standard output."""
         for line in sys.stdin:
+            if len(line) > max_message_size:
+                write_message(make_error(None, PARSE_ERROR, f"Payload too large: message exceeds {max_message_size} bytes limit."))
+                continue
             line = line.strip()
             if not line:
                 continue
             try:
                 msg = json.loads(line)
             except Exception as e:
-                write_message(make_error(None, -32700, f"Parse error: {e}"))
+                write_message(make_error(None, PARSE_ERROR, f"Parse error: {e}"))
                 continue
 
             try:
