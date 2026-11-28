@@ -1,11 +1,12 @@
-"""Zero-dependency local Web HUD dashboard for Token Runway."""
+"""Zero-dependency local web dashboard for Token Runway."""
 
 from __future__ import annotations
 
 import json
+import socket
 import time
 import urllib.parse
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, Optional
 
 from token_runway.server.advice import evaluate_action_feasibility
@@ -13,215 +14,300 @@ from token_runway.server.server import SUPPORTED_PROVIDERS
 from token_runway.sources import fetch_all_runways
 from token_runway.sources.base import ProviderReading
 
-HTML_PAGE = """<!DOCTYPE html>
+_HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Token Runway 🛫 Live HUD</title>
+  <meta name="color-scheme" content="dark">
+  <title>Token Runway · Usage &amp; Limits</title>
   <style>
     :root {
-      --bg: #0d1117;
-      --card-bg: #161b22;
-      --border: #30363d;
-      --text: #c9d1d9;
-      --text-muted: #8b949e;
-      --accent: #58a6ff;
-      --green: #3fb950;
-      --yellow: #d29922;
-      --red: #f85149;
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --surface-hover: #161616;
+      --border: #222222;
+      --border-strong: #333333;
+      --text: #ededed;
+      --text-muted: #888888;
+      --text-faint: #555555;
+      --track: #1c1c1c;
+
+      --green: #45a557;
+      --amber: #d39b2b;
+      --red: #e5484d;
+
+      --radius: 5px;
+      --mono: ui-monospace, "SF Mono", "Geist Mono", Menlo, Consolas, monospace;
+      --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
+    html, body {
+      height: 100vh;
+      overflow: hidden;
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      padding: 24px;
-      line-height: 1.5;
+      font: 12px/1.4 var(--sans);
+      font-feature-settings: "tnum", "cv11";
+      -webkit-font-smoothing: antialiased;
     }
-    .header {
+
+    body {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 24px;
-      padding-bottom: 16px;
+      flex-direction: column;
+    }
+
+    header {
+      height: 38px;
       border-bottom: 1px solid var(--border);
-    }
-    .title {
-      font-size: 24px;
-      font-weight: 700;
       display: flex;
       align-items: center;
-      gap: 10px;
+      justify-content: space-between;
+      padding: 0 16px;
+      flex-shrink: 0;
     }
-    .status-badge {
-      font-size: 12px;
-      padding: 4px 10px;
-      border-radius: 12px;
-      background: rgba(63, 185, 80, 0.15);
-      color: var(--green);
-      font-weight: 600;
-      border: 1px solid var(--green);
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-      gap: 20px;
-      margin-bottom: 32px;
-    }
-    .card {
-      background: var(--card-bg);
+    .crumbs { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+    .crumbs .name { font-weight: 600; letter-spacing: -0.01em; color: var(--text); }
+    .crumbs .tag {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text-muted);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 20px;
-      transition: transform 0.15s ease, border-color 0.15s ease;
+      border-radius: 3px;
+      padding: 0 4px;
+      line-height: 15px;
     }
-    .card:hover {
-      border-color: #58a6ff55;
+    .crumbs .sep { color: var(--text-faint); }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .sync-text { font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+
+    .btn {
+      height: 22px;
+      padding: 0 7px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
     }
-    .card-header {
+    .btn:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+    kbd {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      padding: 0 3px;
+      line-height: 12px;
+    }
+
+    main {
+      flex: 1;
+      width: 100%;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow: hidden;
+    }
+
+    .head-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .head-row h1 { font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+    .head-row p { font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+
+    .provider-columns {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 12px;
+      overflow-y: auto;
+      max-height: calc(100vh - 90px);
+    }
+    .provider-columns::-webkit-scrollbar { width: 5px; height: 5px; }
+    .provider-columns::-webkit-scrollbar-track { background: var(--bg); }
+    .provider-columns::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+    .prov-col {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: border-color 0.12s ease;
+    }
+    .prov-col:hover { border-color: var(--border-strong); }
+
+    .prov-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .prov-identity { display: flex; align-items: center; gap: 7px; min-width: 0; }
+    .prov-tag {
+      width: 22px; height: 18px;
+      border-radius: 3px;
+      border: 1px solid var(--border-strong);
+      background: #171717;
+      display: grid;
+      place-items: center;
+      font: 600 9px/1 var(--mono);
+      color: var(--text);
+      flex-shrink: 0;
+    }
+    .prov-name {
+      font-weight: 500;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .prov-sub {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      font-size: 10px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+
+    .pill {
+      display: inline-block;
+      font-size: 10px;
+      line-height: 16px;
+      padding: 0 5px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      font-family: var(--mono);
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .window-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .window-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .window-top {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
-      margin-bottom: 16px;
+      font-size: 11px;
     }
-    .card-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: #fff;
-    }
-    .card-plan {
-      font-size: 12px;
-      color: var(--text-muted);
-      background: #21262d;
-      padding: 2px 8px;
-      border-radius: 6px;
-    }
-    .window-item {
-      margin-bottom: 14px;
-    }
-    .window-item:last-child {
-      margin-bottom: 0;
-    }
-    .window-meta {
-      display: flex;
-      justify-content: space-between;
-      font-size: 13px;
-      margin-bottom: 6px;
-    }
-    .window-name {
-      font-weight: 500;
-    }
-    .window-val {
-      font-weight: 600;
-    }
-    .progress-bar-bg {
-      background: #21262d;
-      border-radius: 4px;
-      height: 8px;
+    .window-name { color: var(--text); font-weight: 400; }
+    .window-fraction { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+
+    .meter {
+      height: 4px;
+      border-radius: 2px;
+      background: var(--track);
       overflow: hidden;
     }
-    .progress-bar-fill {
-      height: 100%;
-      border-radius: 4px;
-      transition: width 0.4s ease;
-    }
-    .bg-green { background: var(--green); }
-    .bg-yellow { background: var(--yellow); }
-    .bg-red { background: var(--red); }
-    .bg-gray { background: #484f58; }
-    .countdown {
-      font-size: 11px;
+    .meter-fill { display: block; height: 100%; background: var(--text); border-radius: 2px; }
+    .meter-fill.warn { background: var(--amber); }
+    .meter-fill.crit { background: var(--red); }
+
+    .window-bottom {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
       color: var(--text-muted);
-      margin-top: 4px;
+      font-family: var(--mono);
     }
-    .advisor-section {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 24px;
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      color: var(--text);
+      font-family: var(--mono);
     }
-    .advisor-title {
-      font-size: 18px;
-      font-weight: 600;
-      margin-bottom: 16px;
+    .badge::before {
+      content: "";
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--text-faint);
+    }
+    .badge.ok::before { background: var(--green); }
+    .badge.warn::before { background: var(--amber); }
+    .badge.crit::before { background: var(--red); }
+    .badge.neutral { color: var(--text-muted); }
+
+    .note-text { color: var(--text-muted); font-size: 11px; line-height: 1.4; padding: 4px 0; }
+    .empty-state { padding: 18px 12px; text-align: center; color: var(--text-muted); font-size: 11px; }
+
+    footer {
+      height: 28px;
+      border-top: 1px solid var(--border);
+      padding: 0 16px;
       display: flex;
       align-items: center;
-      gap: 8px;
-    }
-    .advisor-form {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 16px;
-      flex-wrap: wrap;
-    }
-    select, input, button {
-      background: #21262d;
-      color: var(--text);
-      border: 1px solid var(--border);
-      padding: 8px 12px;
-      border-radius: 6px;
-      font-size: 14px;
-    }
-    button {
-      background: #238636;
-      color: #fff;
-      font-weight: 600;
-      cursor: pointer;
-      border: none;
-    }
-    button:hover {
-      background: #2ea043;
-    }
-    .verdict-box {
-      background: #0d1117;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 16px;
-      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-      font-size: 13px;
-      white-space: pre-wrap;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--text-faint);
+      font-family: var(--mono);
+      flex-shrink: 0;
     }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div>
-      <div class="title">
-        <span>🛫 Token Runway</span>
-        <span class="status-badge" id="live-indicator">LIVE POLLING (5s)</span>
-      </div>
-      <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
-        Real-time provider rate-limit windows, quotas & credit limits. (Does not tally session token volume).
-      </div>
+  <header>
+    <div class="crumbs">
+      <span class="name">Token Runway</span>
+      <span class="tag">v0.2.4</span>
+      <span class="sep">/</span>
+      <span style="color: var(--text-muted);">Usage</span>
     </div>
-    <div style="font-size: 13px; color: var(--text-muted);" id="last-updated">Updating...</div>
-  </div>
+    <div class="header-right">
+      <span class="sync-text" id="sync-label">Connecting…</span>
+      <button class="btn" id="refresh-btn" type="button" onclick="manualRefresh()" title="Refresh (R)">Refresh <kbd>R</kbd></button>
+    </div>
+  </header>
 
-  <div class="grid" id="providers-grid">
-    <div style="color: var(--text-muted); padding: 20px;">Harvesting active token runways...</div>
-  </div>
+  <main>
+    <div class="head-row">
+      <h1>Active Quotas &amp; Limits</h1>
+      <p id="fleet-summary">Checking providers…</p>
+    </div>
 
-  <div class="advisor-section">
-    <div class="advisor-title">🧠 Assess Action Simulator</div>
-    <div class="advisor-form">
-      <select id="action-type">
-        <option value="subagent_fanout">Subagent Fanout (Parallel Workers)</option>
-        <option value="large_file_dump">Large File Context Ingestion</option>
-        <option value="deep_research">Deep Multi-turn Research</option>
-        <option value="targeted_edit">Targeted File Edit (Lightweight)</option>
-      </select>
-      <select id="action-intensity">
-        <option value="low">Low Intensity</option>
-        <option value="medium" selected>Medium Intensity</option>
-        <option value="high">High Intensity</option>
-      </select>
-      <button onclick="runAssessAction()">Assess Feasibility</button>
+    <div class="provider-columns" id="provider-columns">
+      <div class="empty-state">Loading active rate limits…</div>
     </div>
-    <div class="verdict-box" id="verdict-result">
-      Select an action and click "Assess Feasibility" to test Token Runway advice.
-    </div>
-  </div>
+  </main>
+
+  <footer>
+    <span id="host-label">Loopback only</span>
+    <span>Zero external telemetry sent</span>
+  </footer>
 
   <script>
     function escapeHtml(str) {
@@ -234,112 +320,194 @@ HTML_PAGE = """<!DOCTYPE html>
         .replace(/'/g, '&#39;');
     }
 
+    const TAGS = {
+      copilot: "CP",
+      gemini: "GM",
+      colab: "CO",
+      claude: "CL",
+      antigravity: "AG",
+      openai: "OA",
+      openrouter: "OR"
+    };
+
+    function getTag(key) {
+      const k = (key || '').toLowerCase();
+      for (const [prefix, tag] of Object.entries(TAGS)) {
+        if (k.includes(prefix)) return tag;
+      }
+      return (key || 'AI').slice(0, 2).toUpperCase();
+    }
+
+    function formatReset(mins) {
+      if (mins == null) return '—';
+      const rounded = Math.round(mins);
+      if (rounded < 1) return '< 1m';
+      const d = Math.floor(rounded / 1440);
+      const h = Math.floor((rounded % 1440) / 60);
+      const m = rounded % 60;
+      if (d > 0) return `${d}d ${h}h`;
+      if (h > 0) return `${h}h ${m}m`;
+      return `${m}m`;
+    }
+
     async function loadStatus() {
       try {
         const res = await fetch('/api/status');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
-        renderDashboard(data);
+        renderColumns(data.readings || {});
+        document.getElementById('sync-label').innerText = new Date().toLocaleTimeString();
       } catch (err) {
-        document.getElementById('last-updated').innerText = 'Connection error: ' + err.message;
+        document.getElementById('sync-label').innerText = 'Offline (' + err.message + ')';
       }
     }
 
-    function renderDashboard(data) {
-      document.getElementById('last-updated').innerText = 'Last refreshed: ' + new Date().toLocaleTimeString();
-      const grid = document.getElementById('providers-grid');
-      grid.innerHTML = '';
+    function renderColumns(readings) {
+      const container = document.getElementById('provider-columns');
+      const entries = Object.entries(readings);
+      if (entries.length === 0) {
+        container.innerHTML = '<div class="empty-state">No providers configured.</div>';
+        return;
+      }
 
-      const readings = data.readings || {};
-      for (const [key, r] of Object.entries(readings)) {
-        const card = document.createElement('div');
-        card.className = 'card';
+      let colsHtml = '';
+      let onlineCount = 0;
+      let totalWindows = 0;
 
+      for (const [key, r] of entries) {
+        const provName = escapeHtml(r.display_name || key);
+        const tag = getTag(key);
+        const plan = r.plan ? `<span class="pill" title="${escapeHtml(r.plan)}">${escapeHtml(r.plan)}</span>` : '<span class="note-text">—</span>';
+
+        let statusBadge = '<span class="badge neutral">Offline</span>';
         let windowsHtml = '';
-        if (!r.available) {
-          const err = escapeHtml(r.error_message || 'Unavailable');
-          windowsHtml = `<div style="color: var(--text-muted); font-size: 13px;">${err}</div>`;
-        } else if (!r.windows || r.windows.length === 0) {
-          windowsHtml = '<div style="color: var(--text-muted); font-size: 13px;">No active quotas reported.</div>';
-        } else {
-          for (const w of r.windows) {
-            const pct = w.used_pct != null ? w.used_pct : 0;
-            let barColor = 'bg-green';
-            if (pct >= 90) barColor = 'bg-red';
-            else if (pct >= 75) barColor = 'bg-yellow';
 
-            let countInfo = '';
-            if (w.remaining_count != null && w.total_entitlement != null) {
-              countInfo = ` [${escapeHtml(w.remaining_count)}/${escapeHtml(w.total_entitlement)}]`;
-            } else if (w.remaining_count != null) {
-              countInfo = ` [${escapeHtml(w.remaining_count)}]`;
+        if (!r.available) {
+          const errMsg = escapeHtml(r.error_message || 'Unavailable');
+          windowsHtml = `<div class="note-text">${errMsg}</div>`;
+        } else if (!r.windows || r.windows.length === 0) {
+          onlineCount++;
+          statusBadge = '<span class="badge ok">Normal</span>';
+          windowsHtml = `<div class="note-text">Online · No consumable quota reported</div>`;
+        } else {
+          onlineCount++;
+          let highestPct = -1;
+          let isDepleted = false;
+          windowsHtml = '<div class="window-stack">';
+
+          for (const w of r.windows) {
+            totalWindows++;
+            const hasUsed = w.used_pct != null;
+            const pct = hasUsed ? Math.min(100, Math.max(0, Math.round(w.used_pct))) : null;
+            if (pct != null && pct > highestPct) highestPct = pct;
+            if (w.remaining_count === 0 || (pct != null && pct >= 100)) isDepleted = true;
+
+            let fillClass = '';
+            if (hasUsed) {
+              if (pct >= 90) fillClass = 'crit';
+              else if (pct >= 70) fillClass = 'warn';
             }
 
-            let countdownStr = '';
-            if (w.resets_in_minutes != null) {
-              const hrs = Math.floor(w.resets_in_minutes / 60);
-              const mins = w.resets_in_minutes % 60;
-              countdownStr = `<div class="countdown">Resets in ${hrs > 0 ? hrs + 'h ' : ''}${mins}m</div>`;
+            let fractionStr = '';
+            if (w.remaining_count != null && w.total_entitlement != null) {
+              const used = w.total_entitlement - w.remaining_count;
+              fractionStr = `${used}/${w.total_entitlement}`;
+            } else if (w.remaining_count != null) {
+              fractionStr = `${w.remaining_count} rem`;
             }
 
             windowsHtml += `
               <div class="window-item">
-                <div class="window-meta">
+                <div class="window-top">
                   <span class="window-name">${escapeHtml(w.name)}</span>
-                  <span class="window-val">${w.used_pct != null ? w.used_pct + '%' : '-'}${countInfo}</span>
+                  <span class="window-fraction">${fractionStr}</span>
                 </div>
-                <div class="progress-bar-bg">
-                  <div class="progress-bar-fill ${barColor}" style="width: ${pct}%"></div>
+                <div class="meter"><span class="meter-fill ${fillClass}" style="width: ${hasUsed ? pct : 0}%"></span></div>
+                <div class="window-bottom">
+                  <span>${hasUsed ? pct + '%' : '—'}</span>
+                  <span>${formatReset(w.resets_in_minutes)}</span>
                 </div>
-                ${countdownStr}
               </div>
             `;
           }
+          windowsHtml += '</div>';
+
+          if (isDepleted) statusBadge = '<span class="badge crit">Depleted</span>';
+          else if (highestPct >= 90) statusBadge = '<span class="badge crit">Near limit</span>';
+          else if (highestPct >= 70) statusBadge = '<span class="badge warn">High</span>';
+          else if (highestPct >= 0) statusBadge = '<span class="badge ok">Normal</span>';
+          else statusBadge = '<span class="badge neutral">Unknown</span>';
         }
 
-        card.innerHTML = `
-          <div class="card-header">
-            <span class="card-title">${escapeHtml(r.display_name)}</span>
-            ${r.plan ? `<span class="card-plan">${escapeHtml(r.plan)}</span>` : ''}
+        const limitsCount = r.available ? (r.windows ? r.windows.length : 0) : 0;
+        const limitsText = r.available ? (limitsCount + ' limit' + (limitsCount === 1 ? '' : 's')) : 'Offline';
+
+        colsHtml += `
+          <div class="prov-col">
+            <div class="prov-header">
+              <div class="prov-identity">
+                <span class="prov-tag">${tag}</span>
+                <span class="prov-name" title="${provName}">${provName}</span>
+              </div>
+              ${statusBadge}
+            </div>
+            <div class="prov-sub">
+              ${plan}
+              <span>${limitsText}</span>
+            </div>
+            ${windowsHtml}
           </div>
-          ${windowsHtml}
         `;
-        grid.appendChild(card);
       }
+
+      container.innerHTML = colsHtml;
+      document.getElementById('fleet-summary').innerText = `${onlineCount} of ${entries.length} providers online · ${totalWindows} limits tracked`;
     }
 
-    async function runAssessAction() {
-      const type = document.getElementById('action-type').value;
-      const intensity = document.getElementById('action-intensity').value;
-      const out = document.getElementById('verdict-result');
-      out.innerText = 'Evaluating against live quotas...';
-
-      try {
-        const res = await fetch('/api/assess', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action_type: type, intensity: intensity })
-        });
-        const result = await res.json();
-        out.innerText = JSON.stringify(result, null, 2);
-      } catch (err) {
-        out.innerText = 'Error assessing action: ' + err.message;
-      }
+    function manualRefresh() {
+      loadStatus();
     }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+      if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        manualRefresh();
+      }
+    });
+
+    const hostEl = document.getElementById('host-label');
+    if (hostEl && window.location.host) {
+      hostEl.innerText = window.location.host + ' · Loopback only';
+    }
+
+    let pollTimer = null;
+    function startPolling() {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(() => {
+        if (!document.hidden) loadStatus();
+      }, 5000);
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) loadStatus();
+    });
 
     loadStatus();
-    setInterval(loadStatus, 5000);
+    startPolling();
   </script>
 </body>
 </html>
 """
 
+HTML_PAGE = _HTML_TEMPLATE
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 MAX_REQUEST_BODY_SIZE = 64 * 1024  # 64 KB maximum payload limit
 
 
 class DashboardRequestHandler(BaseHTTPRequestHandler):
-    """Zero-dependency HTTP request handler for the Token Runway Web HUD."""
+    """Zero-dependency HTTP request handler for the Token Runway dashboard."""
 
     server_version = "TokenRunway/0.2.4"
     _cached_readings: Optional[Dict[str, ProviderReading]] = None
@@ -360,8 +528,13 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         """Suppress standard HTTP server access logs to keep terminal quiet."""
         pass
 
-    def _is_safe_origin(self) -> bool:
-        """Protect against unauthorized cross-origin access from external websites."""
+    def _is_safe_request(self) -> bool:
+        """Validate Host and Origin headers to protect against DNS rebinding and cross-origin attacks."""
+        host_header = self.headers.get("Host", "")
+        host_name = host_header.split(":")[0].strip().lower()
+        if host_name and host_name not in LOOPBACK_HOSTS:
+            return False
+
         origin = self.headers.get("Origin")
         if not origin:
             return True
@@ -384,8 +557,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps({"error": message}).encode("utf-8"))
 
     def do_GET(self) -> None:
-        if not self._is_safe_origin():
-            self.send_error(403, "Forbidden: Cross-origin access from external origins is blocked.")
+        if not self._is_safe_request():
+            self.send_error(403, "Forbidden: Invalid Host or Origin header.")
             return
 
         parsed = urllib.parse.urlparse(self.path)
@@ -394,7 +567,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self._send_security_headers()
             self.end_headers()
-            self.wfile.write(HTML_PAGE.encode("utf-8"))
+            self.wfile.write(_HTML_TEMPLATE.encode("utf-8"))
             return
 
         if parsed.path == "/api/status":
@@ -405,6 +578,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             body = json.dumps(payload).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-store, max-age=0")
             self._send_security_headers()
             self.end_headers()
             self.wfile.write(body)
@@ -413,8 +587,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.send_error(404, "Not Found")
 
     def do_POST(self) -> None:
-        if not self._is_safe_origin():
-            self.send_error(403, "Forbidden: Cross-origin access from external origins is blocked.")
+        if not self._is_safe_request():
+            self.send_error(403, "Forbidden: Invalid Host or Origin header.")
             return
 
         parsed = urllib.parse.urlparse(self.path)
@@ -476,8 +650,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             readings = self._get_cached_readings()
             advice = evaluate_action_feasibility(
                 readings,
-                action_type=action_type,
-                intensity=intensity,
+                action_type=action_type.lower().strip(),
+                intensity=intensity.lower().strip(),
                 target_provider=prov_clean,
             )
 
@@ -500,9 +674,15 @@ def start_dashboard(host: str = "127.0.0.1", port: int = 7890, open_browser: boo
             "The Token Runway dashboard has no authentication mechanism and must run loopback-only (127.0.0.1 / localhost)."
         )
 
-    server = HTTPServer((host, port), DashboardRequestHandler)
+    server_cls = ThreadingHTTPServer
+    if ":" in host:
+        class IPv6ThreadingHTTPServer(ThreadingHTTPServer):
+            address_family = socket.AF_INET6
+        server_cls = IPv6ThreadingHTTPServer
+
+    server = server_cls((host, port), DashboardRequestHandler)
     url = f"http://{host}:{port}/"
-    print("\n\033[1;36m=== Token Runway: Web HUD ===\033[0m")
+    print("\n\033[1;36m=== Token Runway: Dashboard ===\033[0m")
     print(f"Dashboard running at: \033[1;32m{url}\033[0m")
     print("Press Ctrl+C to stop.\n")
 

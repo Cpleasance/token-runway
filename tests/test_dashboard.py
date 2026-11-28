@@ -1,12 +1,41 @@
 import json
 import threading
+import unittest
 import urllib.error
 import urllib.request
 from http.server import HTTPServer
 
-import pytest
+try:
+    import pytest
+except ImportError:
+    import contextlib
+
+    class _PytestMock:
+        @staticmethod
+        @contextlib.contextmanager
+        def raises(expected_exception):
+            class ExcInfo:
+                value = None
+
+            info = ExcInfo()
+            try:
+                yield info
+            except expected_exception as e:
+                info.value = e
+            else:
+                raise AssertionError(f"Expected exception {expected_exception} but none was raised")
+
+    pytest = _PytestMock()
 
 from token_runway.viewer.dashboard import DashboardRequestHandler, start_dashboard
+
+
+class TestDashboard(unittest.TestCase):
+    def test_dashboard_http_endpoints(self):
+        test_dashboard_http_endpoints()
+
+    def test_dashboard_loopback_restriction(self):
+        test_dashboard_loopback_restriction()
 
 
 def test_dashboard_http_endpoints():
@@ -23,7 +52,7 @@ def test_dashboard_http_endpoints():
             assert resp.status == 200
             content = resp.read().decode("utf-8")
             assert "Token Runway" in content
-            assert "Assess Action Simulator" in content
+            assert "Usage" in content
             assert resp.headers.get("X-Content-Type-Options") == "nosniff"
             assert resp.headers.get("X-Frame-Options") == "DENY"
 
