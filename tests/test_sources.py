@@ -262,3 +262,23 @@ def test_harvester_schema_resilience():
     assert broken_or.provider == "openrouter"
     assert len(broken_or.windows) == 1
     assert broken_or.windows[0].name == "Cumulative Spend"
+
+
+def test_fetch_all_runways_live_contract():
+    from token_runway.sources import fetch_all_runways
+    from token_runway.sources.base import ProviderReading
+
+    readings = fetch_all_runways(timeout=1.0)
+    assert isinstance(readings, dict)
+    assert len(readings) > 0
+
+    for provider_name, reading in readings.items():
+        assert isinstance(reading, ProviderReading)
+        assert reading.provider == provider_name
+        assert isinstance(reading.display_name, str)
+        assert isinstance(reading.available, bool)
+        assert isinstance(reading.windows, list)
+
+        for win in reading.windows:
+            assert 0.0 <= win.used_pct <= 100.0
+            assert win.status in ("healthy", "warning", "critical", "exhausted", "unknown")
