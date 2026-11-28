@@ -9,6 +9,7 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, Optional
 
+from token_runway import __version__
 from token_runway.server.advice import evaluate_action_feasibility
 from token_runway.server.server import SUPPORTED_PROVIDERS
 from token_runway.sources import fetch_all_runways
@@ -283,7 +284,7 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   <header>
     <div class="crumbs">
       <span class="name">Token Runway</span>
-      <span class="tag">v0.2.4</span>
+      <span class="tag">v{{VERSION}}</span>
       <span class="sep">/</span>
       <span style="color: var(--text-muted);">Usage</span>
     </div>
@@ -509,7 +510,7 @@ MAX_REQUEST_BODY_SIZE = 64 * 1024  # 64 KB maximum payload limit
 class DashboardRequestHandler(BaseHTTPRequestHandler):
     """Zero-dependency HTTP request handler for the Token Runway dashboard."""
 
-    server_version = "TokenRunway/0.2.4"
+    server_version = f"TokenRunway/{__version__}"
     _cached_readings: Optional[Dict[str, ProviderReading]] = None
     _cache_timestamp: float = 0.0
     _cache_ttl: float = 4.0
@@ -567,7 +568,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self._send_security_headers()
             self.end_headers()
-            self.wfile.write(_HTML_TEMPLATE.encode("utf-8"))
+            self.wfile.write(_HTML_TEMPLATE.replace("{{VERSION}}", __version__).encode("utf-8"))
             return
 
         if parsed.path == "/api/status":
